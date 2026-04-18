@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Palette (from product spec) — dark, clean, minimal */
+    --background: 30 13% 9%;        /* #181614 */
+    --foreground: 0 0% 100%;        /* #FEFEFE */
+
+    --card: 30 7% 13%;              /* #23211F */
+    --card-foreground: 24 2% 47%;   /* #7B7876 */
+
+    --popover: 30 7% 11%;           /* #1D1B19 */
+    --popover-foreground: 24 2% 47%;
+
+    --primary: 30 7% 13%;           /* #23211F */
+    --primary-foreground: 24 97% 49%; /* #F96903 */
+
+    --secondary: 127 22% 15%;       /* #202F21 */
+    --secondary-foreground: 147 96% 46%; /* #06E575 */
+
+    --accent: 30 13% 9%;            /* #181614 */
+    --accent-foreground: 0 0% 100%;
+
+    --muted: 20 3% 20%;             /* #343332 */
+    --muted-foreground: 24 2% 47%;
+
+    --destructive: 275 96% 64%;     /* #AC47FC */
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 147 96% 46%;         /* #06E575 */
+    --warning: 215 100% 58%;        /* #297DFF */
+
+    --border: 30 7% 11%;            /* #1D1B19 */
+    --input: 30 7% 13%;             /* #23211F */
+    --ring: 147 96% 46%;            /* #06E575 */
+
+    --radius: 0.25rem;
+  }
+
+  * {
+    @apply border-border;
+  }
+  html, body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+  }
+  ::selection { background: hsl(var(--primary-foreground) / 0.25); color: hsl(var(--foreground)); }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: hsl(var(--muted)); border-radius: 10px; border: 2px solid hsl(var(--background)); }
+  ::-webkit-scrollbar-thumb:hover { background: hsl(var(--card-foreground)); }
+}
+
+@layer components {
+  .glass-card {
+    background: linear-gradient(180deg, hsl(var(--card) / 0.9), hsl(var(--card) / 0.7));
+    border: 1px solid hsl(var(--border));
+    backdrop-filter: blur(6px);
+  }
+  .stat-gradient {
+    background:
+      radial-gradient(ellipse at top right, hsl(var(--primary-foreground) / 0.06), transparent 60%),
+      linear-gradient(180deg, hsl(var(--card)), hsl(var(--card) / 0.85));
+  }
+  .grid-dots {
+    background-image: radial-gradient(hsl(var(--muted) / 0.6) 1px, transparent 1px);
+    background-size: 14px 14px;
+  }
+  .focus-ring {
+    @apply outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2;
+  }
+}
