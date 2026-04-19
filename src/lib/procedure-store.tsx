@@ -7,7 +7,7 @@ import {
   procedures as SEED_PROCEDURES,
 } from "@/lib/mock-data";
 
-const STORAGE_KEY = "irm:procedures:v1";
+const STORAGE_KEY = "irm:procedures:v2";
 
 /**
  * Build a clipboard payload matching the exact requested layout:
@@ -91,16 +91,16 @@ interface ProcedureStoreValue {
 
 const Ctx = React.createContext<ProcedureStoreValue | null>(null);
 
-function load(): Procedure[] {
-  if (typeof window === "undefined") return SEED_PROCEDURES;
+function load(): Procedure[] | null {
+  if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return SEED_PROCEDURES;
+    if (!raw) return null;
     const parsed = JSON.parse(raw) as Procedure[];
-    if (!Array.isArray(parsed)) return SEED_PROCEDURES;
+    if (!Array.isArray(parsed)) return null;
     return parsed;
   } catch {
-    return SEED_PROCEDURES;
+    return null;
   }
 }
 
@@ -122,17 +122,46 @@ function todayUtc(): string {
 }
 
 export function ProcedureProvider({ children }: { children: React.ReactNode }) {
-  const [list, setList] = React.useState<Procedure[]>(SEED_PROCEDURES);
+  // Lazy initial state: read localStorage synchronously on first client render
+  // so hydration never starts from SEED (avoids overwriting user data).
+  const [list, setList] = React.useState<Procedure[]>(() => {
+    const fromStore = load();
+    return fromStore ?? SEED_PROCEDURES.slice();
+  });
+  const [hydrated, setHydrated] = React.useState(false);
 
-  // Hydrate from localStorage on mount (avoids SSR/CSR mismatch).
+  // Mark hydrated on mount. If SSR rendered with SEED and localStorage has
+  // data, adopt it here as a safety net.
   React.useEffect(() => {
-    setList(load());
+    // One-time cleanup: remove the legacy v1 key that could contain data
+    // corrupted by the pre-fix race between hydrate and persist effects.
+    try { window.localStorage.removeItem("irm:procedures:v1"); } catch { /* ignore */ }
+    const fromStore = load();
+    if (fromStore) setList(fromStore);
+    setHydrated(true);
   }, []);
 
-  // Persist on change.
+  // Persist ONLY after hydration, so we never write SEED over real data.
   React.useEffect(() => {
+    if (!hydrated) return;
     save(list);
-  }, [list]);
+  }, [list, hydrated]);
+
+  // Cross-tab sync: reflect changes saved by other tabs.
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    function onStorage(e: StorageEvent) {
+      if (e.key !== STORAGE_KEY || e.newValue == null) return;
+      try {
+        const parsed = JSON.parse(e.newValue);
+        if (Array.isArray(parsed)) setList(parsed as Procedure[]);
+      } catch {
+        /* ignore */
+      }
+    }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   const addProcedure = React.useCallback<ProcedureStoreValue["addProcedure"]>(
     (input) => {
@@ -215,7 +244,7 @@ export function ProcedureProvider({ children }: { children: React.ReactNode }) {
     [list]
   );
 
-  const resetToSeed = React.useCallback(() => setList(SEED_PROCEDURES), []);
+  const resetToSeed = React.useCallback(() => setList(SEED_PROCEDURES.slice()), []);
 
   const value = React.useMemo<ProcedureStoreValue>(
     () => ({

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { ProcedureType, PROCEDURE_TYPE_SEEDS } from "@/lib/mock-data";
 
-const STORAGE_KEY = "irm:procedure-types:v1";
+const STORAGE_KEY = "irm:procedure-types:v2";
 
 interface Value {
   types: ProcedureType[];
@@ -16,15 +16,15 @@ interface Value {
 
 const Ctx = React.createContext<Value | null>(null);
 
-function load(): ProcedureType[] {
-  if (typeof window === "undefined") return PROCEDURE_TYPE_SEEDS;
+function load(): ProcedureType[] | null {
+  if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return PROCEDURE_TYPE_SEEDS;
+    if (!raw) return null;
     const parsed = JSON.parse(raw) as ProcedureType[];
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : PROCEDURE_TYPE_SEEDS;
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : null;
   } catch {
-    return PROCEDURE_TYPE_SEEDS;
+    return null;
   }
 }
 
@@ -42,15 +42,42 @@ function makeId() {
 }
 
 export function ProcedureTypesProvider({ children }: { children: React.ReactNode }) {
-  const [list, setList] = React.useState<ProcedureType[]>(PROCEDURE_TYPE_SEEDS);
+  // Lazy initial state: read localStorage synchronously on first client render.
+  const [list, setList] = React.useState<ProcedureType[]>(() => {
+    const fromStore = load();
+    return fromStore ?? PROCEDURE_TYPE_SEEDS.slice();
+  });
+  const [hydrated, setHydrated] = React.useState(false);
 
   React.useEffect(() => {
-    setList(load());
+    // One-time cleanup of the legacy v1 key (pre-fix hydrate/persist race).
+    try { window.localStorage.removeItem("irm:procedure-types:v1"); } catch { /* ignore */ }
+    const fromStore = load();
+    if (fromStore) setList(fromStore);
+    setHydrated(true);
   }, []);
 
+  // Persist ONLY after hydration — otherwise SEED could overwrite real data.
   React.useEffect(() => {
+    if (!hydrated) return;
     save(list);
-  }, [list]);
+  }, [list, hydrated]);
+
+  // Cross-tab sync.
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    function onStorage(e: StorageEvent) {
+      if (e.key !== STORAGE_KEY || e.newValue == null) return;
+      try {
+        const parsed = JSON.parse(e.newValue);
+        if (Array.isArray(parsed)) setList(parsed as ProcedureType[]);
+      } catch {
+        /* ignore */
+      }
+    }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   const addType = React.useCallback<Value["addType"]>((input) => {
     const t: ProcedureType = {
