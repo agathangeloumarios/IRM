@@ -34,6 +34,7 @@ type ViewMode = "list" | "card";
 
 export default function PatientsPage() {
   const { patients, template } = usePatients();
+  const activePatients = useMemo(() => patients.filter((p) => p.status !== "archived"), [patients]);
   const router = useRouter();
   const [q, setQ] = useState("");
   const [tab, setTab] = useState("all");
@@ -43,16 +44,16 @@ export default function PatientsPage() {
   const [view, setView] = useState<ViewMode>("list");
 
   const counts = useMemo(() => {
-    const c = { all: patients.length, active: 0, inactive: 0, completed: 0, archived: 0 };
-    for (const p of patients) {
+    const c = { all: activePatients.length, active: 0, inactive: 0, completed: 0 };
+    for (const p of activePatients) {
       if (p.status in c) (c as any)[p.status]++;
     }
     return c;
-  }, [patients]);
+  }, [activePatients]);
 
   const filtered = useMemo(() => {
     const query = q.toLowerCase().trim();
-    return patients.filter((p) => {
+    return activePatients.filter((p) => {
       const matchQ =
         !query ||
         p.fullName.toLowerCase().includes(query) ||
@@ -64,7 +65,7 @@ export default function PatientsPage() {
       const matchGender = genderFilter === "all" || p.gender === genderFilter;
       return matchQ && matchTab && matchGender;
     });
-  }, [q, tab, genderFilter, patients]);
+  }, [q, tab, genderFilter, activePatients]);
 
   const templateSource = patients.find((p) => p.isTemplateSource);
 
@@ -134,7 +135,6 @@ export default function PatientsPage() {
             <TabsTrigger value="active">Active ({counts.active})</TabsTrigger>
             <TabsTrigger value="inactive">Inactive ({counts.inactive})</TabsTrigger>
             <TabsTrigger value="completed">Completed ({counts.completed})</TabsTrigger>
-            <TabsTrigger value="archived">Archived ({counts.archived})</TabsTrigger>
           </TabsList>
         </Tabs>
 
@@ -257,7 +257,7 @@ export default function PatientsPage() {
             </div>
           )}
           <div className="text-xs text-muted-foreground">
-            Showing {filtered.length} of {patients.length} patients
+            Showing {filtered.length} of {activePatients.length} patients
           </div>
         </>
       )}
@@ -365,7 +365,7 @@ export default function PatientsPage() {
             </div>
             <div className="flex items-center justify-between border-t border-border px-4 py-3">
               <div className="text-xs text-muted-foreground">
-                Showing {filtered.length} of {patients.length} patients
+                Showing {filtered.length} of {activePatients.length} patients
                 {template && (
                   <> · Source: <span className="font-mono text-foreground capitalize">{template.source}</span></>
                 )}

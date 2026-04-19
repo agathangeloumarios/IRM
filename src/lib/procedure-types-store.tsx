@@ -42,11 +42,8 @@ function makeId() {
 }
 
 export function ProcedureTypesProvider({ children }: { children: React.ReactNode }) {
-  // Lazy initial state: read localStorage synchronously on first client render.
-  const [list, setList] = React.useState<ProcedureType[]>(() => {
-    const fromStore = load();
-    return fromStore ?? PROCEDURE_TYPE_SEEDS.slice();
-  });
+  // Keep SSR and first client render identical. Local data is adopted on mount.
+  const [list, setList] = React.useState<ProcedureType[]>(() => PROCEDURE_TYPE_SEEDS.slice());
   const [hydrated, setHydrated] = React.useState(false);
 
   React.useEffect(() => {

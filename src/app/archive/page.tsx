@@ -9,25 +9,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { patients } from "@/lib/mock-data";
 import { formatDate, initials } from "@/lib/utils";
+import { usePatients } from "@/lib/patient-store";
 
 export default function ArchivePage() {
   const [q, setQ] = useState("");
+  const { patients, setStatus } = usePatients();
   const archived = useMemo(
     () =>
       patients
-        .concat(
-          Array.from({ length: 6 }, (_, i) => ({
-            ...patients[i % patients.length],
-            id: `arc-${i}`,
-            mrn: `IR-22${String(i).padStart(4, "0")}`,
-            status: "archived" as const,
-          }))
-        )
-        .filter((p) => p.status === "archived" || p.id.startsWith("arc-"))
+        .filter((p) => p.status === "archived")
         .filter((p) => !q || p.fullName.toLowerCase().includes(q.toLowerCase()) || p.mrn.includes(q)),
-    [q]
+    [patients, q]
   );
 
   return (
@@ -43,7 +36,7 @@ export default function ArchivePage() {
     >
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { l: "Total Archived", v: "2,847", i: ArchiveIcon },
+          { l: "Total Archived", v: String(archived.length), i: ArchiveIcon },
           { l: "Auto-Archived (30d)", v: "84", i: Clock },
           { l: "Storage Used", v: "4.2 GB", i: Database },
           { l: "Encryption", v: "AES-256", i: ShieldCheck },
@@ -109,7 +102,13 @@ export default function ArchivePage() {
                       <Badge variant="outline">7 years remaining</Badge>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Button variant="outline" size="sm"><RotateCcw className="h-3.5 w-3.5" /> Restore</Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setStatus(p.id, "active")}
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" /> Restore
+                      </Button>
                     </td>
                   </tr>
                 ))}

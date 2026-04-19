@@ -122,12 +122,8 @@ function todayUtc(): string {
 }
 
 export function ProcedureProvider({ children }: { children: React.ReactNode }) {
-  // Lazy initial state: read localStorage synchronously on first client render
-  // so hydration never starts from SEED (avoids overwriting user data).
-  const [list, setList] = React.useState<Procedure[]>(() => {
-    const fromStore = load();
-    return fromStore ?? SEED_PROCEDURES.slice();
-  });
+  // Keep SSR and first client render identical. Local data is adopted on mount.
+  const [list, setList] = React.useState<Procedure[]>(() => SEED_PROCEDURES.slice());
   const [hydrated, setHydrated] = React.useState(false);
 
   // Mark hydrated on mount. If SSR rendered with SEED and localStorage has

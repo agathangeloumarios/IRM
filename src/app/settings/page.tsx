@@ -24,7 +24,7 @@ import { ProcedureType } from "@/lib/mock-data";
 
 const practiceSchema = z.object({
   name: z.string().min(2, "Practice name is required"),
-  npi: z.string().regex(/^\d{10}$/, "NPI must be 10 digits"),
+  npi: z.string(),
   address: z.string().min(5, "Address required"),
   phone: z.string().min(7, "Phone required"),
   email: z.string().email("Valid email required"),

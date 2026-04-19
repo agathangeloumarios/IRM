@@ -42,7 +42,7 @@ const statusVariant: Record<PatientStatus, "success" | "warning" | "outline" | "
 
 export function PatientDetailDialog({ patient, open, onOpenChange }: Props) {
   const router = useRouter();
-  const { updatePatient, deletePatient, setStatus } = usePatients();
+  const { updatePatient, deletePatient } = usePatients();
   const [draft, setDraft] = React.useState<Patient | null>(patient);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const [dirty, setDirty] = React.useState(false);
@@ -62,8 +62,8 @@ export function PatientDetailDialog({ patient, open, onOpenChange }: Props) {
 
   const handleStatus = (s: PatientStatus) => {
     if (!draft) return;
-    setStatus(draft.id, s);
     setDraft({ ...draft, status: s === "completed" ? "archived" : s });
+    setDirty(true);
   };
 
   const handleSave = () => {
