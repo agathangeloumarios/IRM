@@ -1,0 +1,80 @@
+// IRM persistence schema.
+// Switch provider to "postgresql" in production; everything else stays the same.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Patient {
+  id               String    @id @default(cuid())
+  mrn              String    @unique
+  fullName         String
+  dob              String
+  docId            String
+  referralId       String
+  phone            String
+  gender           String
+  visitDate        String
+  reportDate       String
+  activity         String
+  referringDoctor  String
+  status           String    @default("active")
+  source           String
+  isTemplateSource Boolean   @default(false)
+
+  // Dedup: stable identity of the record regardless of file name
+  naturalKey       String    @unique
+  // Dedup: sha256 of raw XML bytes (same file re-uploaded)
+  importHash       String?
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  importedAt       DateTime?
+
+  @@index([importHash])
+}
+
+model Template {
+  id               String            @id @default(cuid())
+  name             String
+  category         String
+  body             String
+  chromeJson       String?
+  locked           Boolean           @default(false)
+  source           String
+  originalFileName String?
+  orderIndex       Int               @default(0)
+  currentVersion   Int               @default(1)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  versions         TemplateVersion[]
+}
+
+model TemplateVersion {
+  id         String   @id @default(cuid())
+  templateId String
+  version    Int
+  name       String
+  body       String
+  chromeJson String?
+  createdAt  DateTime @default(now())
+  reason     String?
+  template   Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, version])
+}
+
+model ImportLog {
+  id         String   @id @default(cuid())
+  fileName   String?
+  hash       String   @unique
+  patientId  String?
+  status     String // "ok" | "duplicate" | "rejected"
+  violations String?
+  createdAt  DateTime @default(now())
+}

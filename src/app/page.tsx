@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   Activity, Users, CalendarClock, DollarSign, Clock, MapPin,
   ChevronRight, CheckCircle2, Circle, PlayCircle, MoreHorizontal,
+  ListChecks, Copy,
 } from "lucide-react";
 import { PageShell } from "@/components/layout/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,20 +17,31 @@ import {
 } from "@/components/ui/select";
 import { StatCard } from "@/components/stat-card";
 import { VolumeArea, RevenueBars, PixelActivity } from "@/components/charts";
-import {
-  monthlyVolume, appointments, procedures, patients,
-} from "@/lib/mock-data";
+import { monthlyVolume, ProcedureStatus } from "@/lib/mock-data";
 import { formatTime } from "@/lib/utils";
+import { useProcedures, copyProcedureToClipboard } from "@/lib/procedure-store";
+import { usePatients } from "@/lib/patient-store";
 
 const statusConfig: Record<string, { label: string; variant: any; icon: any }> = {
-  waiting: { label: "Waiting", variant: "warning", icon: Circle },
-  "checked-in": { label: "Checked In", variant: "primary", icon: CheckCircle2 },
-  "in-room": { label: "In Room", variant: "success", icon: PlayCircle },
-  completed: { label: "Completed", variant: "outline", icon: CheckCircle2 },
+  scheduled: { label: "Scheduled", variant: "warning", icon: Circle },
+  "waiting-list": { label: "Waiting", variant: "primary", icon: ListChecks },
+  completed: { label: "Completed", variant: "success", icon: CheckCircle2 },
+  cancelled: { label: "Cancelled", variant: "outline", icon: PlayCircle },
 };
 
 export default function DashboardPage() {
   const [range, setRange] = useState("monthly");
+  const { procedures, todayScheduled, waitingList, setStatus } = useProcedures();
+  const { patients } = usePatients();
+  const todays = todayScheduled();
+  const waiting = waitingList();
+
+  const activePatientCount = patients.filter((p) => p.status === "active").length;
+
+  const handleCopy = async (id: string) => {
+    const p = procedures.find((x) => x.id === id);
+    if (p) await copyProcedureToClipboard(p);
+  };
 
   return (
     <PageShell
@@ -48,8 +61,10 @@ export default function DashboardPage() {
             </SelectContent>
           </Select>
           <Button variant="outline" size="sm">Export</Button>
-          <Button variant="primary" size="sm">
-            <Activity className="h-4 w-4" /> New Procedure
+          <Button variant="primary" size="sm" asChild>
+            <Link href="/procedures">
+              <Activity className="h-4 w-4" /> New Procedure
+            </Link>
           </Button>
         </>
       }
@@ -66,7 +81,7 @@ export default function DashboardPage() {
         />
         <StatCard
           label="Active Patients"
-          value="1,248"
+          value={String(activePatientCount || patients.length)}
           delta="+4.7%"
           icon={Users}
           spark={[120, 128, 134, 141, 148, 152, 160, 166, 172, 180, 190, 195]}
@@ -74,8 +89,8 @@ export default function DashboardPage() {
         />
         <StatCard
           label="Today's Appointments"
-          value="8"
-          delta="+2"
+          value={String(todays.length)}
+          delta={`${waiting.length} on waitlist`}
           icon={CalendarClock}
           spark={[5, 6, 4, 7, 8, 6, 9, 7, 8, 10, 8, 8]}
           color="#297DFF"
@@ -132,14 +147,21 @@ export default function DashboardPage() {
         <Card className="xl:col-span-2">
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle>Today's Appointments</CardTitle>
-            <Button variant="ghost" size="sm" className="text-xs">
-              View all <ChevronRight className="h-3 w-3" />
+            <Button variant="ghost" size="sm" className="text-xs" asChild>
+              <Link href="/procedures">
+                View all <ChevronRight className="h-3 w-3" />
+              </Link>
             </Button>
           </CardHeader>
           <CardContent className="p-0">
             <div className="divide-y divide-border">
-              {appointments.map((a, idx) => {
-                const s = statusConfig[a.status];
+              {todays.length === 0 && (
+                <div className="px-5 py-8 text-center text-xs text-muted-foreground">
+                  No scheduled procedures for today.
+                </div>
+              )}
+              {todays.map((a, idx) => {
+                const s = statusConfig[a.status] || statusConfig.scheduled;
                 const S = s.icon;
                 return (
                   <motion.div
@@ -150,7 +172,7 @@ export default function DashboardPage() {
                     className="flex items-center gap-4 px-5 py-3 hover:bg-card/50 transition-colors"
                   >
                     <div className="w-16 shrink-0 text-right">
-                      <div className="text-sm font-mono font-medium text-foreground">{formatTime(a.time)}</div>
+                      <div className="text-sm font-mono font-medium text-foreground">{formatTime(a.scheduledAt)}</div>
                     </div>
                     <div className="h-8 w-8 rounded-md bg-secondary border border-secondary-foreground/20 flex items-center justify-center text-xs font-semibold text-secondary-foreground">
                       {a.patientName.split(" ").map((n) => n[0]).slice(0, 2).join("")}
@@ -158,16 +180,30 @@ export default function DashboardPage() {
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium text-foreground truncate">{a.patientName}</div>
                       <div className="text-xs text-muted-foreground flex items-center gap-1.5 truncate">
-                        {a.procedure}
+                        {a.type}
                         {a.room && (<><span>·</span><MapPin className="h-3 w-3" />{a.room}</>)}
                       </div>
                     </div>
-                    <Badge variant={s.variant} className="gap-1">
-                      <S className="h-3 w-3" />
-                      {s.label}
-                    </Badge>
-                    <Button variant="ghost" size="icon" className="h-7 w-7">
-                      <MoreHorizontal className="h-4 w-4" />
+                    <Select
+                      value={a.status}
+                      onValueChange={(v) => setStatus(a.id, v as ProcedureStatus)}
+                    >
+                      <SelectTrigger className="h-7 w-[130px] text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="scheduled">Scheduled</SelectItem>
+                        <SelectItem value="waiting-list">Waiting List</SelectItem>
+                        <SelectItem value="completed">Completed</SelectItem>
+                        <SelectItem value="cancelled">Cancelled</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      variant="ghost" size="icon" className="h-7 w-7"
+                      title="Copy details"
+                      onClick={() => handleCopy(a.id)}
+                    >
+                      <Copy className="h-3.5 w-3.5" />
                     </Button>
                   </motion.div>
                 );
@@ -180,22 +216,33 @@ export default function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle>Waiting List</CardTitle>
-            <div className="mt-1 text-xs text-muted-foreground">3 patients · avg wait 12 min</div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {waiting.length} procedure{waiting.length === 1 ? "" : "s"} awaiting slot
+            </div>
           </CardHeader>
           <CardContent className="space-y-2.5">
-            {patients.slice(0, 4).map((p, index) => (
+            {waiting.length === 0 && (
+              <div className="rounded-md border border-dashed border-border p-5 text-center text-[11px] text-muted-foreground">
+                Waiting list is empty.
+              </div>
+            )}
+            {waiting.slice(0, 6).map((p) => (
               <div key={p.id} className="flex items-center gap-3 rounded-md border border-border bg-background/40 p-2.5">
                 <div className="h-7 w-7 rounded-md bg-primary-foreground/10 border border-primary-foreground/20 flex items-center justify-center text-[10px] font-semibold text-primary-foreground">
-                  {p.fullName.split(" ").map((n) => n[0]).slice(0, 2).join("")}
+                  {p.patientName.split(" ").map((n) => n[0]).slice(0, 2).join("")}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-medium text-foreground truncate">{p.fullName}</div>
-                  <div className="text-[10px] text-muted-foreground truncate">{p.activity}</div>
+                  <div className="text-xs font-medium text-foreground truncate">{p.patientName}</div>
+                  <div className="text-[10px] text-muted-foreground truncate">{p.type}</div>
                 </div>
-                <div className="text-[10px] font-mono text-muted-foreground">
-                  <Clock className="h-3 w-3 inline mr-0.5" />
-                  {index * 4 + 7}m
-                </div>
+                <Button
+                  variant="ghost" size="sm"
+                  className="h-6 text-[10px]"
+                  title="Move to Scheduled"
+                  onClick={() => setStatus(p.id, "scheduled")}
+                >
+                  <CalendarClock className="h-3 w-3" />
+                </Button>
               </div>
             ))}
           </CardContent>
@@ -249,7 +296,7 @@ export default function DashboardPage() {
               <tbody className="divide-y divide-border">
                 {procedures.slice(0, 6).map((p) => (
                   <tr key={p.id} className="hover:bg-card/40 transition-colors">
-                    <td className="px-5 py-3 font-mono text-xs text-muted-foreground">#{p.id.toUpperCase()}</td>
+                    <td className="px-5 py-3 font-mono text-xs text-muted-foreground">#{p.id.toUpperCase().slice(0, 12)}</td>
                     <td className="px-5 py-3 font-medium text-foreground">{p.patientName}</td>
                     <td className="px-5 py-3 text-muted-foreground">{p.type}</td>
                     <td className="px-5 py-3 text-muted-foreground">{p.room}</td>
@@ -257,7 +304,7 @@ export default function DashboardPage() {
                       <Badge
                         variant={
                           p.status === "completed" ? "success" :
-                          p.status === "in-progress" ? "primary" :
+                          p.status === "waiting-list" ? "primary" :
                           p.status === "cancelled" ? "destructive" : "warning"
                         }
                       >

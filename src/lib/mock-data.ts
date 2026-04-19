@@ -1,7 +1,7 @@
 // Mock data store for demo purposes. Replace with HIPAA-compliant backend in production.
 
 export type PatientStatus = "active" | "inactive" | "completed" | "archived";
-export type ProcedureStatus = "scheduled" | "in-progress" | "completed" | "cancelled";
+export type ProcedureStatus = "scheduled" | "waiting-list" | "completed" | "cancelled";
 
 /**
  * Enforced 11-field patient template (Greek labels).
@@ -53,13 +53,21 @@ export interface Procedure {
   id: string;
   patientId: string;
   patientName: string;
+  patientMrn?: string;
+  patientPhone?: string;
+  patientDob?: string;
+  patientReferralId?: string;
+  patientDocId?: string;
   type: string;
   physician: string;
-  scheduledAt: string;
+  scheduledAt: string;      // ISO datetime
   durationMin: number;
   status: ProcedureStatus;
   room: string;
   notes?: string;
+  createdAt: string;
+  updatedAt: string;
+  statusChangedAt: string;
 }
 
 export interface Appointment {
@@ -171,13 +179,13 @@ export const patients: Patient[] = [
 ];
 
 export const procedures: Procedure[] = [
-  { id: "pr-001", patientId: "p-001", patientName: "ΕΛΕΝΗ ΜΑΡΚΕΤΗ", type: "Uterine Fibroid Embolization", physician: "Dr. Reyes", scheduledAt: iso(0, 9), durationMin: 90, status: "scheduled", room: "IR-Suite 1" },
-  { id: "pr-002", patientId: "p-002", patientName: "ΜΑΡΚΟΣ ΧΟΛΑΝΤΕΡ", type: "TACE - Liver", physician: "Dr. Reyes", scheduledAt: iso(0, 11), durationMin: 120, status: "in-progress", room: "IR-Suite 2" },
-  { id: "pr-003", patientId: "p-003", patientName: "ΑΝΙΚΑ ΡΑΧΜΑΝ", type: "Peripheral Angioplasty", physician: "Dr. Reyes", scheduledAt: iso(0, 14), durationMin: 75, status: "scheduled", room: "IR-Suite 1" },
-  { id: "pr-004", patientId: "p-006", patientName: "ΙΟΡΔΑΝΗΣ ΑΛΒΑΡΕΖ", type: "Varicocele Embolization", physician: "Dr. Reyes", scheduledAt: iso(1, 9, 30), durationMin: 60, status: "scheduled", room: "IR-Suite 1" },
-  { id: "pr-005", patientId: "p-004", patientName: "ΘΕΟΔΩΡΟΣ ΚΙΜ", type: "Prostate Artery Embolization", physician: "Dr. Reyes", scheduledAt: iso(2, 10), durationMin: 120, status: "scheduled", room: "IR-Suite 2" },
-  { id: "pr-006", patientId: "p-002", patientName: "ΜΑΡΚΟΣ ΧΟΛΑΝΤΕΡ", type: "Biliary Drainage", physician: "Dr. Reyes", scheduledAt: iso(-3, 13), durationMin: 60, status: "completed", room: "IR-Suite 1" },
-  { id: "pr-007", patientId: "p-003", patientName: "ΑΝΙΚΑ ΡΑΧΜΑΝ", type: "Angiogram", physician: "Dr. Reyes", scheduledAt: iso(-7, 9), durationMin: 45, status: "completed", room: "IR-Suite 1" },
+  { id: "pr-001", patientId: "p-001", patientName: "ΕΛΕΝΗ ΜΑΡΚΕΤΗ", type: "Uterine Fibroid Embolization", physician: "Dr. Reyes", scheduledAt: iso(0, 9), durationMin: 90, status: "scheduled", room: "IR-Suite 1", createdAt: iso(-2, 11), updatedAt: iso(-2, 11), statusChangedAt: iso(-2, 11) },
+  { id: "pr-002", patientId: "p-002", patientName: "ΜΑΡΚΟΣ ΧΟΛΑΝΤΕΡ", type: "TACE - Liver", physician: "Dr. Reyes", scheduledAt: iso(0, 11), durationMin: 120, status: "scheduled", room: "IR-Suite 2", createdAt: iso(-1, 14), updatedAt: iso(-1, 14), statusChangedAt: iso(-1, 14) },
+  { id: "pr-003", patientId: "p-003", patientName: "ΑΝΙΚΑ ΡΑΧΜΑΝ", type: "Peripheral Angioplasty", physician: "Dr. Reyes", scheduledAt: iso(0, 14), durationMin: 75, status: "waiting-list", room: "IR-Suite 1", createdAt: iso(-3, 9), updatedAt: iso(-3, 9), statusChangedAt: iso(-3, 9) },
+  { id: "pr-004", patientId: "p-006", patientName: "ΙΟΡΔΑΝΗΣ ΑΛΒΑΡΕΖ", type: "Varicocele Embolization", physician: "Dr. Reyes", scheduledAt: iso(1, 9, 30), durationMin: 60, status: "scheduled", room: "IR-Suite 1", createdAt: iso(-1, 16), updatedAt: iso(-1, 16), statusChangedAt: iso(-1, 16) },
+  { id: "pr-005", patientId: "p-004", patientName: "ΘΕΟΔΩΡΟΣ ΚΙΜ", type: "Prostate Artery Embolization", physician: "Dr. Reyes", scheduledAt: iso(2, 10), durationMin: 120, status: "waiting-list", room: "IR-Suite 2", createdAt: iso(0, 10), updatedAt: iso(0, 10), statusChangedAt: iso(0, 10) },
+  { id: "pr-006", patientId: "p-002", patientName: "ΜΑΡΚΟΣ ΧΟΛΑΝΤΕΡ", type: "Biliary Drainage", physician: "Dr. Reyes", scheduledAt: iso(-3, 13), durationMin: 60, status: "completed", room: "IR-Suite 1", createdAt: iso(-5, 13), updatedAt: iso(-3, 14), statusChangedAt: iso(-3, 14) },
+  { id: "pr-007", patientId: "p-003", patientName: "ΑΝΙΚΑ ΡΑΧΜΑΝ", type: "Angiogram", physician: "Dr. Reyes", scheduledAt: iso(-7, 9), durationMin: 45, status: "completed", room: "IR-Suite 1", createdAt: iso(-9, 9), updatedAt: iso(-7, 10), statusChangedAt: iso(-7, 10) },
 ];
 
 export const appointments: Appointment[] = [
@@ -238,3 +246,24 @@ export const dailyActivity = Array.from({ length: 28 }, (_, i) => {
 
 // Back-compat: earlier UI referenced this constant. Now derived from the template.
 export const PATIENT_FIELD_TEMPLATE = PATIENT_TEMPLATE_FIELDS.map((f) => f.label);
+
+export interface ProcedureType {
+  id: string;
+  name: string;
+  defaultDurationMin: number;
+  cpt?: string;
+  active: boolean;
+}
+
+export const PROCEDURE_TYPE_SEEDS: ProcedureType[] = [
+  { id: "pt-001", name: "Uterine Fibroid Embolization", defaultDurationMin: 90,  cpt: "37243", active: true },
+  { id: "pt-002", name: "TACE - Liver",                 defaultDurationMin: 120, cpt: "37244", active: true },
+  { id: "pt-003", name: "Peripheral Angioplasty",       defaultDurationMin: 75,  cpt: "37224", active: true },
+  { id: "pt-004", name: "Prostate Artery Embolization", defaultDurationMin: 120, cpt: "37243", active: true },
+  { id: "pt-005", name: "Varicocele Embolization",      defaultDurationMin: 60,  cpt: "37241", active: true },
+  { id: "pt-006", name: "Biliary Drainage",             defaultDurationMin: 60,  cpt: "47533", active: true },
+  { id: "pt-007", name: "Angiogram",                    defaultDurationMin: 45,  cpt: "36200", active: true },
+  { id: "pt-008", name: "Biopsy - Core Needle",         defaultDurationMin: 45,  cpt: "10005", active: true },
+];
+
+export const PROCEDURE_ROOMS = ["IR-Suite 1", "IR-Suite 2"] as const;

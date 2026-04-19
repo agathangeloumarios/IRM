@@ -1,9 +1,10 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
-  Trash2, Save, ShieldCheck, AlertTriangle, Archive, FileCode2, User,
+  Trash2, Save, ShieldCheck, AlertTriangle, Archive, FileCode2, CalendarPlus, ListChecks,
 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -40,6 +41,7 @@ const statusVariant: Record<PatientStatus, "success" | "warning" | "outline" | "
 };
 
 export function PatientDetailDialog({ patient, open, onOpenChange }: Props) {
+  const router = useRouter();
   const { updatePatient, deletePatient, setStatus } = usePatients();
   const [draft, setDraft] = React.useState<Patient | null>(patient);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
@@ -61,7 +63,6 @@ export function PatientDetailDialog({ patient, open, onOpenChange }: Props) {
   const handleStatus = (s: PatientStatus) => {
     if (!draft) return;
     setStatus(draft.id, s);
-    // Reflect the auto-archive rule locally.
     setDraft({ ...draft, status: s === "completed" ? "archived" : s });
   };
 
@@ -78,6 +79,12 @@ export function PatientDetailDialog({ patient, open, onOpenChange }: Props) {
     deletePatient(draft.id);
     setConfirmDelete(false);
     onOpenChange(false);
+  };
+
+  const goSchedule = (status: "scheduled" | "waiting-list") => {
+    if (!draft) return;
+    onOpenChange(false);
+    router.push(`/procedures?patient=${encodeURIComponent(draft.id)}&status=${status}`);
   };
 
   const fieldMap: Record<string, keyof Patient | "mrn"> = {
@@ -231,7 +238,15 @@ export function PatientDetailDialog({ patient, open, onOpenChange }: Props) {
           </div>
         </div>
 
-        <DialogFooter className="pt-4 border-t border-border">
+        <DialogFooter className="pt-4 border-t border-border gap-2 flex-wrap">
+          <div className="flex items-center gap-2 mr-auto">
+            <Button variant="outline" size="sm" onClick={() => goSchedule("scheduled")}>
+              <CalendarPlus className="h-4 w-4" /> Schedule Procedure
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => goSchedule("waiting-list")}>
+              <ListChecks className="h-4 w-4" /> Add to Waiting List
+            </Button>
+          </div>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
           <Button variant="primary" onClick={handleSave} disabled={!dirty}>
             <Save className="h-4 w-4" /> Save Changes

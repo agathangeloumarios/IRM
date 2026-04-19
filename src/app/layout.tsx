@@ -6,6 +6,8 @@ import { Topbar } from "@/components/layout/topbar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { PatientProvider } from "@/lib/patient-store";
 import { TemplateProvider } from "@/lib/template-store";
+import { ProcedureProvider } from "@/lib/procedure-store";
+import { ProcedureTypesProvider } from "@/lib/procedure-types-store";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -46,6 +48,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <TooltipProvider delayDuration={200}>
           <PatientProvider>
             <TemplateProvider>
+            <ProcedureTypesProvider>
+            <ProcedureProvider>
             <a
               href="#main"
               className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded focus:bg-primary focus:px-3 focus:py-1.5 focus:text-primary-foreground"
@@ -61,6 +65,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </main>
               </div>
             </div>
+            </ProcedureProvider>
+            </ProcedureTypesProvider>
             </TemplateProvider>
           </PatientProvider>
         </TooltipProvider>

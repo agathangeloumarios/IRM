@@ -29,3 +29,7 @@ pnpm-debug.log*
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts.bak
+
+# Prisma / SQLite dev database
+prisma/*.db
+prisma/*.db-journal

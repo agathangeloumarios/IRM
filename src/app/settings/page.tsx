@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import * as React from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
   Save, Palette, Building2, Stethoscope, ShieldCheck, Bell, Keyboard,
-  Check, Paintbrush,
+  Check, Paintbrush, Plus, Pencil, Trash2, X,
 } from "lucide-react";
 import { PageShell } from "@/components/layout/page-shell";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -18,6 +19,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { useProcedureTypes } from "@/lib/procedure-types-store";
+import { ProcedureType } from "@/lib/mock-data";
 
 const practiceSchema = z.object({
   name: z.string().min(2, "Practice name is required"),
@@ -28,6 +31,16 @@ const practiceSchema = z.object({
 });
 type PracticeForm = z.infer<typeof practiceSchema>;
 
+const PRACTICE_SETTINGS_KEY = "irm:settings:practice:v1";
+
+const PRACTICE_DEFAULTS: PracticeForm = {
+  name: "Solo IR · Bay Area",
+  npi: "1234567890",
+  address: "450 Sutter St, Suite 1200, San Francisco, CA 94108",
+  phone: "+1 (415) 555-0100",
+  email: "reception@solo-ir.example",
+};
+
 const accents = [
   { name: "Orange", value: "#F96903", active: true },
   { name: "Green", value: "#06E575" },
@@ -37,35 +50,187 @@ const accents = [
   { name: "Rose", value: "#F43F5E" },
 ];
 
-const procTypes = [
-  "Uterine Fibroid Embolization",
-  "TACE - Liver",
-  "Peripheral Angioplasty",
-  "Prostate Artery Embolization",
-  "Varicocele Embolization",
-  "Biliary Drainage",
-  "Angiogram",
-  "Biopsy - Core Needle",
-];
+function ProcedureTypesPanel() {
+  const { types, addType, updateType, deleteType, toggleActive } = useProcedureTypes();
+
+  const [draft, setDraft] = React.useState({ name: "", duration: 60, cpt: "" });
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [editDraft, setEditDraft] = React.useState<{ name: string; duration: number; cpt: string }>({ name: "", duration: 60, cpt: "" });
+
+  const canAdd = draft.name.trim().length >= 2 && draft.duration > 0;
+
+  const handleAdd = () => {
+    if (!canAdd) return;
+    addType({
+      name: draft.name,
+      defaultDurationMin: draft.duration,
+      cpt: draft.cpt,
+      active: true,
+    });
+    setDraft({ name: "", duration: 60, cpt: "" });
+  };
+
+  const startEdit = (t: ProcedureType) => {
+    setEditingId(t.id);
+    setEditDraft({ name: t.name, duration: t.defaultDurationMin, cpt: t.cpt || "" });
+  };
+
+  const commitEdit = () => {
+    if (!editingId) return;
+    updateType(editingId, {
+      name: editDraft.name.trim(),
+      defaultDurationMin: editDraft.duration,
+      cpt: editDraft.cpt.trim() || undefined,
+    });
+    setEditingId(null);
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Procedure Types</CardTitle>
+        <CardDescription>
+          Customize available procedure types, default durations, and CPT codes. Used across the Schedule Procedure dialog.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {/* Add new */}
+        <div className="rounded-md border border-border bg-card/60 p-3">
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_110px_110px_auto] gap-2">
+            <Input
+              placeholder="Procedure name (e.g. Thyroid Ablation)"
+              value={draft.name}
+              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+            />
+            <Input
+              type="number" min={15} step={15}
+              placeholder="min"
+              value={draft.duration}
+              onChange={(e) => setDraft({ ...draft, duration: Number(e.target.value) || 0 })}
+            />
+            <Input
+              placeholder="CPT"
+              value={draft.cpt}
+              onChange={(e) => setDraft({ ...draft, cpt: e.target.value })}
+            />
+            <Button variant="primary" size="sm" onClick={handleAdd} disabled={!canAdd}>
+              <Plus className="h-4 w-4" /> Add
+            </Button>
+          </div>
+        </div>
+
+        {/* List */}
+        <div className="space-y-2">
+          {types.length === 0 && (
+            <div className="rounded-md border border-dashed border-border p-8 text-center text-xs text-muted-foreground">
+              No procedure types yet.
+            </div>
+          )}
+          {types.map((t, i) => {
+            const editing = editingId === t.id;
+            return (
+              <div
+                key={t.id}
+                className="flex items-center justify-between gap-3 rounded-md border border-border bg-card/60 p-3"
+              >
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <span className="text-[10px] font-mono text-muted-foreground w-6 shrink-0">
+                    #{String(i + 1).padStart(2, "0")}
+                  </span>
+                  {!editing ? (
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-foreground truncate">{t.name}</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        Default duration: {t.defaultDurationMin} min
+                        {t.cpt ? ` · CPT: ${t.cpt}` : ""}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-[1fr_90px_90px] gap-2 flex-1">
+                      <Input
+                        value={editDraft.name}
+                        onChange={(e) => setEditDraft({ ...editDraft, name: e.target.value })}
+                      />
+                      <Input
+                        type="number" min={15} step={15}
+                        value={editDraft.duration}
+                        onChange={(e) => setEditDraft({ ...editDraft, duration: Number(e.target.value) || 0 })}
+                      />
+                      <Input
+                        value={editDraft.cpt}
+                        onChange={(e) => setEditDraft({ ...editDraft, cpt: e.target.value })}
+                      />
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {!editing ? (
+                    <>
+                      <Badge variant={t.active ? "success" : "outline"}>
+                        {t.active ? "Active" : "Disabled"}
+                      </Badge>
+                      <Switch
+                        checked={t.active}
+                        onCheckedChange={(v) => toggleActive(t.id, !!v)}
+                      />
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(t)} title="Edit">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost" size="icon" className="h-7 w-7 text-destructive"
+                        title="Delete"
+                        onClick={() => {
+                          if (confirm(`Delete procedure type "${t.name}"?`)) deleteType(t.id);
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" title="Cancel" onClick={() => setEditingId(null)}>
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button variant="primary" size="sm" className="h-7" onClick={commitEdit}>
+                        <Save className="h-3.5 w-3.5" /> Save
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const {
     register,
     handleSubmit,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm<PracticeForm>({
     resolver: zodResolver(practiceSchema),
-    defaultValues: {
-      name: "Solo IR · Bay Area",
-      npi: "1234567890",
-      address: "450 Sutter St, Suite 1200, San Francisco, CA 94108",
-      phone: "+1 (415) 555-0100",
-      email: "reception@solo-ir.example",
-    },
+    defaultValues: PRACTICE_DEFAULTS,
   });
 
-  const onSubmit = async () => {
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(PRACTICE_SETTINGS_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Partial<PracticeForm>;
+      reset({ ...PRACTICE_DEFAULTS, ...parsed });
+    } catch {
+      // Ignore malformed saved state and keep defaults.
+    }
+  }, [reset]);
+
+  const onSubmit = async (values: PracticeForm) => {
+    localStorage.setItem(PRACTICE_SETTINGS_KEY, JSON.stringify(values));
     await new Promise((r) => setTimeout(r, 600));
     setSaved(true);
     setTimeout(() => setSaved(false), 2400);
@@ -189,34 +354,7 @@ export default function SettingsPage() {
 
         {/* Procedure types */}
         <TabsContent value="procedures">
-          <Card>
-            <CardHeader className="flex-row items-center justify-between">
-              <div>
-                <CardTitle>Procedure Types</CardTitle>
-                <CardDescription>Customize available procedure types and their defaults.</CardDescription>
-              </div>
-              <Button variant="primary" size="sm"><Paintbrush className="h-4 w-4" /> Add Type</Button>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {procTypes.map((p, i) => (
-                <div key={p} className="flex items-center justify-between rounded-md border border-border bg-card/60 p-3">
-                  <div className="flex items-center gap-3">
-                    <span className="text-[10px] font-mono text-muted-foreground w-6">#{String(i + 1).padStart(2, "0")}</span>
-                    <div>
-                      <div className="text-sm font-medium text-foreground">{p}</div>
-                      <div className="text-[10px] text-muted-foreground">
-                        Default duration: {60 + i * 10} min · CPT: 37{240 + i}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">Active</Badge>
-                    <Switch defaultChecked />
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+          <ProcedureTypesPanel />
         </TabsContent>
 
         {/* Security */}

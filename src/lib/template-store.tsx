@@ -102,12 +102,14 @@ export interface ReportTemplate {
   source: "seed" | "custom" | "upload";
   originalFileName?: string;
   chrome?: TemplateChrome;
+  /** Server-assigned optimistic-concurrency version. Present on DB-backed rows. */
+  currentVersion?: number;
 }
 
 interface TemplateStoreValue {
   templates: ReportTemplate[];
   addTemplate: (t: Omit<ReportTemplate, "id" | "createdAt" | "updatedAt"> & Partial<Pick<ReportTemplate, "id">>) => ReportTemplate;
-  updateTemplate: (id: string, patch: Partial<ReportTemplate>) => void;
+  updateTemplate: (id: string, patch: Partial<ReportTemplate>) => Promise<ReportTemplate>;
   deleteTemplate: (id: string) => void;
   duplicateTemplate: (id: string) => ReportTemplate | null;
   lockTemplate: (id: string, locked: boolean) => void;
@@ -120,103 +122,9 @@ interface TemplateStoreValue {
 const STORAGE_KEY = "irm:templates:v1";
 
 // ---- Seed templates ------------------------------------------------------
-
-const CONSULTATION_BODY = `ΓΝΩΜΑΤΕΥΣΗ
-
-Ονοματεπώνυμο: {{BeneficiaryName}} {{BeneficiaryLastName}}
-Ημ. Γέννησης: {{BeneficiaryDOB}}
-ΑΔΤ: {{BeneficiaryDocId}}
-Αρ. Παραπεμπτικού: {{ReferralId}}
-Φύλο: {{BeneficiaryGender}}
-Ημ. Εξετ.: {{VisitDateTime}}
-Ημ. Γνωμάτευσης: {{ReportDate}}
-Δραστηριότητα: {{ReferralActivityId}} {{ReferralActivityName}}
-Παραπ. Ιατρός: {{ReferralDoctorName}}
-
-ΙΣΤΟΡΙΚΟ
-Ο/Η ασθενής προσήλθε για εξέταση στο πλαίσιο παρακολούθησης της πάθησής του/της. Αναφέρεται πλήρες ιστορικό και τρέχουσα συμπτωματολογία.
-
-ΚΛΙΝΙΚΗ ΕΞΕΤΑΣΗ
-Η κλινική εικόνα είναι σταθερή. Δεν παρατηρούνται ανησυχητικά ευρήματα κατά την αντικειμενική εξέταση.
-
-ΕΥΡΗΜΑΤΑ
-Τα απεικονιστικά ευρήματα συνάδουν με την αναμενόμενη εξέλιξη. Δεν διαπιστώνονται νέες αλλοιώσεις.
-
-ΣΥΣΤΑΣΕΙΣ
-Συνιστάται επανεκτίμηση σε 3 μήνες και συνέχιση της συνταγογραφημένης αγωγής χωρίς μεταβολή.
-`;
-
-const DISCHARGE_BODY = `ΕΞΙΤΗΡΙΟ
-
-Ονοματεπώνυμο: {{BeneficiaryName}} {{BeneficiaryLastName}}
-Ημ. Γέννησης: {{BeneficiaryDOB}}
-ΑΔΤ: {{BeneficiaryDocId}}
-Αρ. Παραπεμπτικού: {{ReferralId}}
-Φύλο: {{BeneficiaryGender}}
-Ημ. Εξετ.: {{VisitDateTime}}
-Ημ. Γνωμάτευσης: {{ReportDate}}
-Δραστηριότητα: {{ReferralActivityId}} {{ReferralActivityName}}
-Παραπ. Ιατρός: {{ReferralDoctorName}}
-
-ΠΕΡΙΓΡΑΦΗ ΕΠΕΜΒΑΣΗΣ
-Υπό άσηπτες συνθήκες και καταστολή, πραγματοποιήθηκε η προγραμματισμένη επεμβατική διαδικασία χωρίς επιπλοκές.
-
-ΜΕΤΕΓΧΕΙΡΗΤΙΚΗ ΠΟΡΕΙΑ
-Ομαλή ανάνηψη. Σταθερά ζωτικά σημεία. Καλή ανοχή της διαδικασίας.
-
-ΦΑΡΜΑΚΕΥΤΙΚΗ ΑΓΩΓΗ
-- Παρακεταμόλη 500mg PO q6h PRN
-- Ιβουπροφαίνη 400mg PO q8h PRN
-
-ΟΔΗΓΙΕΣ ΕΞΟΔΟΥ
-Επανεξέταση σε 2 εβδομάδες. Άμεση επικοινωνία σε περίπτωση πυρετού, έντονου πόνου ή αιμορραγίας.
-`;
-
-const SEED_TEMPLATES: ReportTemplate[] = [
-  {
-    id: "tpl-seed-consult-followup",
-    name: "Γνωμάτευση Παρακολούθησης",
-    category: "consultation",
-    body: CONSULTATION_BODY,
-    locked: true,
-    createdAt: "2026-04-01T09:00:00.000Z",
-    updatedAt: "2026-04-01T09:00:00.000Z",
-    source: "seed",
-  },
-  {
-    id: "tpl-seed-consult-initial",
-    name: "Γνωμάτευση Αρχικής Εκτίμησης",
-    category: "consultation",
-    body: CONSULTATION_BODY.replace(
-      "Συνιστάται επανεκτίμηση σε 3 μήνες και συνέχιση της συνταγογραφημένης αγωγής χωρίς μεταβολή.",
-      "Συνιστάται επιπλέον απεικονιστικός έλεγχος και επανεξέταση σε 4 εβδομάδες."
-    ),
-    locked: false,
-    createdAt: "2026-04-05T09:00:00.000Z",
-    updatedAt: "2026-04-05T09:00:00.000Z",
-    source: "seed",
-  },
-  {
-    id: "tpl-seed-discharge-ufe",
-    name: "UFE Discharge Summary",
-    category: "discharge",
-    body: DISCHARGE_BODY,
-    locked: true,
-    createdAt: "2026-04-02T09:00:00.000Z",
-    updatedAt: "2026-04-02T09:00:00.000Z",
-    source: "seed",
-  },
-  {
-    id: "tpl-seed-discharge-tace",
-    name: "TACE Post-Procedure",
-    category: "discharge",
-    body: DISCHARGE_BODY,
-    locked: false,
-    createdAt: "2026-04-06T09:00:00.000Z",
-    updatedAt: "2026-04-06T09:00:00.000Z",
-    source: "seed",
-  },
-];
+// Seed data lives in a plain (non-client) module so the Prisma seed script
+// can consume it without pulling React.
+export { SEED_TEMPLATES } from "./template-seeds";
 
 // ---- File extraction (docx/pdf/txt → text) -------------------------------
 
@@ -321,7 +229,7 @@ async function readZipEntry(bytes: Uint8Array, entryName: string): Promise<strin
       }
       if (method === 8 && typeof DecompressionStream !== "undefined") {
         const ds = new DecompressionStream("deflate-raw");
-        const stream = new Blob([data]).stream().pipeThrough(ds);
+        const stream = new Blob([data.slice().buffer]).stream().pipeThrough(ds);
         const out = new Uint8Array(await new Response(stream).arrayBuffer());
         return decoder.decode(out);
       }
@@ -341,33 +249,58 @@ function extractPdfText(buf: ArrayBuffer): string {
   return lines.join("\n");
 }
 
-// ---- Provider ------------------------------------------------------------
+// ---- Provider (DB-backed via /api/templates) ----------------------------
 
 const TemplateCtx = React.createContext<TemplateStoreValue | null>(null);
 
+async function http<T = any>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, {
+    ...init,
+    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
+  });
+  if (!res.ok) {
+    let msg = `${res.status} ${res.statusText}`;
+    try {
+      const j = await res.json();
+      if (j?.error) msg = j.error;
+    } catch {}
+    throw new Error(msg);
+  }
+  return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
+}
+
+function sortByOrder(list: ReportTemplate[]): ReportTemplate[] {
+  // Server returns ordered list already, but keep a stable client sort fallback.
+  return list;
+}
+
 export function TemplateProvider({ children }: { children: React.ReactNode }) {
-  const [templates, setTemplates] = React.useState<ReportTemplate[]>(SEED_TEMPLATES);
+  const [templates, setTemplates] = React.useState<ReportTemplate[]>([]);
+  const templatesRef = React.useRef<ReportTemplate[]>([]);
 
   React.useEffect(() => {
+    templatesRef.current = templates;
+  }, [templates]);
+
+  const refresh = React.useCallback(async () => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed: ReportTemplate[] = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) setTemplates(parsed);
-      }
-    } catch {
-      /* ignore */
+      const list = await http<ReportTemplate[]>("/api/templates");
+      setTemplates(sortByOrder(list));
+    } catch (e) {
+      console.error("Failed to load templates", e);
     }
   }, []);
 
   React.useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(templates)); } catch {}
-  }, [templates]);
+    void refresh();
+  }, [refresh]);
 
   const addTemplate: TemplateStoreValue["addTemplate"] = React.useCallback((t) => {
+    // Optimistic: return a stub with temp id; real row replaces it after POST.
+    const tempId = t.id || "tpl-tmp-" + Math.random().toString(36).slice(2, 10);
     const now = new Date().toISOString();
-    const tpl: ReportTemplate = {
-      id: t.id || "tpl-" + Math.random().toString(36).slice(2, 10),
+    const optimistic: ReportTemplate = {
+      id: tempId,
       name: t.name,
       category: t.category,
       body: t.body,
@@ -378,115 +311,211 @@ export function TemplateProvider({ children }: { children: React.ReactNode }) {
       originalFileName: t.originalFileName,
       chrome: t.chrome,
     };
-    setTemplates((list) => [tpl, ...list]);
-    return tpl;
-  }, []);
-
-  const updateTemplate: TemplateStoreValue["updateTemplate"] = React.useCallback((id, patch) => {
-    setTemplates((list) =>
-      list.map((t) => {
-        if (t.id !== id) return t;
-        if (t.locked && !("locked" in patch)) return t; // locked templates are read-only
-        return { ...t, ...patch, updatedAt: new Date().toISOString() };
+    setTemplates((list) => [optimistic, ...list]);
+    void http<ReportTemplate>("/api/templates", {
+      method: "POST",
+      body: JSON.stringify({
+        name: t.name,
+        category: t.category,
+        body: t.body,
+        locked: t.locked ?? false,
+        source: t.source,
+        originalFileName: t.originalFileName,
+        chrome: t.chrome,
+      }),
+    })
+      .then((saved) => {
+        setTemplates((list) => list.map((x) => (x.id === tempId ? saved : x)));
       })
-    );
+      .catch((e) => {
+        console.error("addTemplate failed", e);
+        setTemplates((list) => list.filter((x) => x.id !== tempId));
+      });
+    return optimistic;
   }, []);
 
-  const deleteTemplate: TemplateStoreValue["deleteTemplate"] = React.useCallback((id) => {
-    setTemplates((list) => list.filter((t) => t.id !== id));
-  }, []);
+  const updateTemplate: TemplateStoreValue["updateTemplate"] = React.useCallback(
+    async (id, patch) => {
+      const prev = templatesRef.current.find((template) => template.id === id);
+      if (!prev) throw new Error("Template not found");
+      if (prev.locked && !("locked" in patch)) throw new Error("locked");
 
-  const duplicateTemplate: TemplateStoreValue["duplicateTemplate"] = React.useCallback((id) => {
-    let dup: ReportTemplate | null = null;
-    setTemplates((list) => {
-      const src = list.find((t) => t.id === id);
-      if (!src) return list;
+      // Optimistic local patch
+      setTemplates((list) =>
+        list.map((t) => {
+          if (t.id !== id) return t;
+          return { ...t, ...patch, updatedAt: new Date().toISOString() };
+        })
+      );
+      const body = { ...patch, expectedVersion: prev.currentVersion };
+
+      try {
+        const saved = await http<ReportTemplate>(`/api/templates/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          body: JSON.stringify(body),
+        });
+        setTemplates((list) => list.map((x) => (x.id === id ? saved : x)));
+        return saved;
+      } catch (e) {
+        console.error("updateTemplate failed", e);
+        void refresh();
+        throw e;
+      }
+    },
+    [refresh]
+  );
+
+  const deleteTemplate: TemplateStoreValue["deleteTemplate"] = React.useCallback(
+    (id) => {
+      const snapshot = templates;
+      setTemplates((list) => list.filter((t) => t.id !== id));
+      void http<void>(`/api/templates/${encodeURIComponent(id)}`, { method: "DELETE" }).catch(
+        (e) => {
+          console.error("deleteTemplate failed", e);
+          setTemplates(snapshot);
+        }
+      );
+    },
+    [templates]
+  );
+
+  const duplicateTemplate: TemplateStoreValue["duplicateTemplate"] = React.useCallback(
+    (id) => {
+      const src = templates.find((t) => t.id === id);
+      if (!src) return null;
       const now = new Date().toISOString();
-      dup = {
+      const tempId = "tpl-tmp-" + Math.random().toString(36).slice(2, 10);
+      const optimistic: ReportTemplate = {
         ...src,
-        id: "tpl-" + Math.random().toString(36).slice(2, 10),
+        id: tempId,
         name: src.name + " (Copy)",
         locked: false,
         createdAt: now,
         updatedAt: now,
         source: "custom",
       };
-      const idx = list.findIndex((t) => t.id === id);
-      const next = list.slice();
-      next.splice(idx + 1, 0, dup);
-      return next;
-    });
-    return dup;
-  }, []);
+      setTemplates((list) => {
+        const idx = list.findIndex((t) => t.id === id);
+        const next = list.slice();
+        next.splice(idx + 1, 0, optimistic);
+        return next;
+      });
+      void http<ReportTemplate>(`/api/templates/${encodeURIComponent(id)}/duplicate`, {
+        method: "POST",
+      })
+        .then((saved) => {
+          setTemplates((list) => list.map((x) => (x.id === tempId ? saved : x)));
+        })
+        .catch((e) => {
+          console.error("duplicateTemplate failed", e);
+          setTemplates((list) => list.filter((x) => x.id !== tempId));
+        });
+      return optimistic;
+    },
+    [templates]
+  );
 
-  const lockTemplate: TemplateStoreValue["lockTemplate"] = React.useCallback((id, locked) => {
-    setTemplates((list) =>
-      list.map((t) => (t.id === id ? { ...t, locked, updatedAt: new Date().toISOString() } : t))
-    );
-  }, []);
+  const lockTemplate: TemplateStoreValue["lockTemplate"] = React.useCallback(
+    (id, locked) => {
+      void updateTemplate(id, { locked });
+    },
+    [updateTemplate]
+  );
 
-  const reorderTemplates: TemplateStoreValue["reorderTemplates"] = React.useCallback((id, direction) => {
-    setTemplates((list) => {
-      const idx = list.findIndex((t) => t.id === id);
-      if (idx < 0) return list;
-      const swap = direction === "up" ? idx - 1 : idx + 1;
-      if (swap < 0 || swap >= list.length) return list;
-      const next = list.slice();
-      [next[idx], next[swap]] = [next[swap], next[idx]];
-      return next;
-    });
-  }, []);
+  const reorderTemplates: TemplateStoreValue["reorderTemplates"] = React.useCallback(
+    (id, direction) => {
+      let nextOrder: string[] | null = null;
+      setTemplates((list) => {
+        const idx = list.findIndex((t) => t.id === id);
+        if (idx < 0) return list;
+        const swap = direction === "up" ? idx - 1 : idx + 1;
+        if (swap < 0 || swap >= list.length) return list;
+        const next = list.slice();
+        [next[idx], next[swap]] = [next[swap], next[idx]];
+        nextOrder = next.map((t) => t.id);
+        return next;
+      });
+      if (nextOrder) {
+        void http("/api/templates/reorder", {
+          method: "POST",
+          body: JSON.stringify({ ids: nextOrder }),
+        }).catch((e) => {
+          console.error("reorderTemplates failed", e);
+          void refresh();
+        });
+      }
+    },
+    [refresh]
+  );
 
   const exportJson: TemplateStoreValue["exportJson"] = React.useCallback(() => {
     return JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), templates }, null, 2);
   }, [templates]);
 
-  const importJson: TemplateStoreValue["importJson"] = React.useCallback((raw, mode = "merge") => {
-    try {
-      const parsed = JSON.parse(raw);
-      const incoming: ReportTemplate[] = Array.isArray(parsed) ? parsed : parsed.templates;
-      if (!Array.isArray(incoming)) return { ok: false, error: "Invalid JSON structure" };
-      const clean = incoming.filter((t) => t && t.name && t.body && t.category);
-      if (mode === "replace") {
-        setTemplates(clean);
-      } else {
-        setTemplates((list) => {
-          const existingIds = new Set(list.map((t) => t.id));
-          const merged = [...list];
-          for (const t of clean) {
-            if (existingIds.has(t.id)) {
-              merged.push({ ...t, id: "tpl-" + Math.random().toString(36).slice(2, 10) });
-            } else {
-              merged.push(t);
+  const importJson: TemplateStoreValue["importJson"] = React.useCallback(
+    (raw, mode = "merge") => {
+      try {
+        const parsed = JSON.parse(raw);
+        const incoming: ReportTemplate[] = Array.isArray(parsed) ? parsed : parsed.templates;
+        if (!Array.isArray(incoming)) return { ok: false, error: "Invalid JSON structure" };
+        const clean = incoming.filter((t) => t && t.name && t.body && t.category);
+        // Fire-and-forget POSTs; refresh at end.
+        (async () => {
+          if (mode === "replace") {
+            // Delete everything first.
+            for (const t of templates) {
+              try {
+                await http(`/api/templates/${encodeURIComponent(t.id)}`, { method: "DELETE" });
+              } catch {
+                /* ignore */
+              }
             }
           }
-          return merged;
-        });
+          for (const t of clean) {
+            try {
+              await http("/api/templates", {
+                method: "POST",
+                body: JSON.stringify({
+                  name: t.name,
+                  category: t.category,
+                  body: t.body,
+                  locked: t.locked ?? false,
+                  source: t.source ?? "custom",
+                  originalFileName: t.originalFileName,
+                  chrome: t.chrome,
+                }),
+              });
+            } catch (e) {
+              console.error("importJson: failed to create", t.name, e);
+            }
+          }
+          await refresh();
+        })();
+        return { ok: true, count: clean.length };
+      } catch (e: any) {
+        return { ok: false, error: e?.message || "Parse error" };
       }
-      return { ok: true, count: clean.length };
-    } catch (e: any) {
-      return { ok: false, error: e?.message || "Parse error" };
-    }
-  }, []);
+    },
+    [templates, refresh]
+  );
 
   const uploadFileAsTemplate: TemplateStoreValue["uploadFileAsTemplate"] = React.useCallback(
     async (file, category) => {
       const body = await extractTextFromFile(file);
       const name = file.name.replace(/\.(docx|pdf|txt|md)$/i, "");
-      const now = new Date().toISOString();
-      const tpl: ReportTemplate = {
-        id: "tpl-" + Math.random().toString(36).slice(2, 10),
-        name,
-        category,
-        body: body || `[Empty upload — paste template body here]`,
-        locked: false,
-        createdAt: now,
-        updatedAt: now,
-        source: "upload",
-        originalFileName: file.name,
-      };
-      setTemplates((list) => [tpl, ...list]);
-      return tpl;
+      const saved = await http<ReportTemplate>("/api/templates", {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          category,
+          body: body || `[Empty upload — paste template body here]`,
+          locked: false,
+          source: "upload",
+          originalFileName: file.name,
+        }),
+      });
+      setTemplates((list) => [saved, ...list]);
+      return saved;
     },
     []
   );

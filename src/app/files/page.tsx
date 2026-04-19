@@ -603,17 +603,21 @@ function CustomizeDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
   template: ReportTemplate;
-  onSave: (patch: Partial<ReportTemplate>) => void;
+  onSave: (patch: Partial<ReportTemplate>) => Promise<ReportTemplate>;
 }) {
   const resolved = resolveChrome(template.chrome);
   const [chrome, setChrome] = useState<TemplateChrome>(template.chrome ?? {});
   const [body, setBody] = useState<string>(template.body);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Reset local state when template or open state changes.
   React.useEffect(() => {
     if (open) {
       setChrome(template.chrome ?? {});
       setBody(template.body);
+      setSaving(false);
+      setSaveError(null);
     }
   }, [open, template.id, template.chrome, template.body]);
 
@@ -629,9 +633,17 @@ function CustomizeDialog({
     patch(key, url);
   };
 
-  const save = () => {
-    onSave({ chrome, body });
-    onOpenChange(false);
+  const save = async () => {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await onSave({ chrome, body });
+      onOpenChange(false);
+    } catch (e: any) {
+      setSaveError(e?.message || "Failed to save changes");
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Effective (resolved) values for preview / placeholder text.
@@ -868,15 +880,23 @@ function CustomizeDialog({
         </div>
 
         <DialogFooter>
+          {saveError && (
+            <div className="mr-auto text-xs text-destructive">
+              {saveError}
+            </div>
+          )}
           <Button
             variant="ghost"
             onClick={() => { setChrome({}); }}
             title="Clear all overrides — revert to defaults"
+            disabled={saving}
           >
             Reset to defaults
           </Button>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button variant="primary" onClick={save}>Save changes</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>
+          <Button variant="primary" onClick={save} disabled={saving}>
+            {saving ? "Saving..." : "Save changes"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

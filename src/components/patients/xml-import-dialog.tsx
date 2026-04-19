@@ -64,18 +64,23 @@ export function XmlImportDialog({ open, onOpenChange }: Props) {
     setStage("preview");
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!phone.trim()) {
       setError("Τηλέφωνο is required (manual entry)");
       return;
     }
-    const res = importXml(xmlText, phone.trim());
-    if (!res.ok || !res.patient) {
-      setError(res.error || "Import failed");
-      return;
+    setError(null);
+    try {
+      const res = await importXml(xmlText, phone.trim(), fileName || undefined);
+      if (!res.ok || !res.patient) {
+        setError(res.error || "Import failed");
+        return;
+      }
+      setImported(res.patient.fullName);
+      setStage("done");
+    } catch {
+      setError("Import failed");
     }
-    setImported(res.patient.fullName);
-    setStage("done");
   };
 
   // Map the extracted XML record to the 11 displayable template fields.

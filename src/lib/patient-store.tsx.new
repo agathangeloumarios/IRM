@@ -1,3 +1,7 @@
+// OBSOLETE — this file was a scratch draft for the DB-backed patient store
+// migration. The real code now lives in ./patient-store.tsx. Please delete
+// this file: `rm src/lib/patient-store.tsx.new`.
+export {};
 "use client";
 
 import * as React from "react";
@@ -5,14 +9,15 @@ import { Patient, PatientStatus } from "@/lib/mock-data";
 import {
   parsePatientXml,
   buildPatientFromXml,
+  naturalKeyFromExtracted,
 } from "@/lib/xml";
 
-// Re-exports preserve the existing public surface of this module.
+// Re-exports to preserve the existing public surface of this module.
 export { parsePatientXml, buildPatientFromXml };
 
 /**
  * Template of canonical field keys. Derived from the current first patient;
- * no longer persisted client-side. The database is the source of truth.
+ * no longer persisted client-side. DB is the source of truth.
  */
 export interface FieldTemplate {
   id: string;
@@ -77,7 +82,7 @@ export function PatientProvider({ children }: { children: React.ReactNode }) {
       setPatients(list);
       setTemplate(deriveTemplate(list));
     } catch (e) {
-      // Keep the last-known state; next mount or manual refresh will retry.
+      // Leave current state; next mount/refresh retries.
       console.error("[patients] refresh failed", e);
     }
   }, []);
@@ -97,8 +102,7 @@ export function PatientProvider({ children }: { children: React.ReactNode }) {
       (async () => {
         try {
           const naturalKey =
-            [p.docId || "", p.referralId || "", p.visitDate || p.id].join("|") ||
-            p.id;
+            [p.docId || "", p.referralId || "", p.visitDate || p.id].join("|") || p.id;
           const res = await fetch("/api/patients", {
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -154,7 +158,6 @@ export function PatientProvider({ children }: { children: React.ReactNode }) {
 
   const setStatus = React.useCallback<PatientStoreValue["setStatus"]>(
     (id, status) => {
-      // "Completed" → auto-archive per existing workflow.
       const resolved: PatientStatus = status === "completed" ? "archived" : status;
       updatePatient(id, { status: resolved });
     },
@@ -163,8 +166,8 @@ export function PatientProvider({ children }: { children: React.ReactNode }) {
 
   const importXml = React.useCallback<PatientStoreValue["importXml"]>(
     async (xml, manualPhone, fileName) => {
-      // Pre-validate client-side so obvious garbage returns friendly violations
-      // without a network round-trip.
+      // Pre-validate client-side so we can return a friendly violations list
+      // without bothering the server on obvious garbage.
       const pre = parsePatientXml(xml);
       if (
         pre.violations.length > 0 &&
@@ -180,9 +183,10 @@ export function PatientProvider({ children }: { children: React.ReactNode }) {
           body: JSON.stringify({ xml, phone: manualPhone, fileName }),
         });
         const data = (await res.json()) as ImportResult & { patient?: Patient };
-        if (res.ok && data.ok) {
-          // Reload from server; server-side dedup may have mutated the list.
+        if (res.ok && data.ok && data.patient) {
+          // Reload from server; dedup may have mutated the list.
           await refresh();
+          return data;
         }
         return data;
       } catch (e: any) {
