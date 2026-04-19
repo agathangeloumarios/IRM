@@ -95,13 +95,13 @@ export const MOCK_NOW_ISO = "2026-04-18T09:00:00.000Z";
 const now = new Date(MOCK_NOW_ISO);
 const iso = (offsetDays: number, hour = 9, minute = 0) => {
   const d = new Date(now);
-  d.setDate(d.getDate() + offsetDays);
-  d.setHours(hour, minute, 0, 0);
+  d.setUTCDate(d.getUTCDate() + offsetDays);
+  d.setUTCHours(hour, minute, 0, 0);
   return d.toISOString();
 };
 const ymd = (offsetDays: number) => {
   const d = new Date(now);
-  d.setDate(d.getDate() + offsetDays);
+  d.setUTCDate(d.getUTCDate() + offsetDays);
   return d.toISOString().slice(0, 10);
 };
 

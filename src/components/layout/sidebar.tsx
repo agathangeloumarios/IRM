@@ -42,7 +42,7 @@ const groups: { label: string; items: Item[] }[] = [
 export function Sidebar() {
   const pathname = usePathname();
   return (
-    <aside className="hidden lg:flex w-64 shrink-0 flex-col border-r border-border bg-card/40 backdrop-blur-sm h-screen sticky top-0">
+    <aside className="hidden lg:flex w-64 shrink-0 flex-col border-r border-border bg-[#181614] h-screen sticky top-0">
       {/* Practice switcher */}
       <div className="p-3">
         <button className="w-full flex items-center gap-3 rounded-md border border-border bg-card/60 px-3 py-2.5 hover:bg-card transition focus-ring">
