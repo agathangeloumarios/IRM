@@ -551,6 +551,7 @@ export function useTemplates() {
 // ---- Shared placeholder resolution --------------------------------------
 
 export const PLACEHOLDER_KEYS = [
+  // Consultation (Greek beneficiary form)
   "BeneficiaryName",
   "BeneficiaryLastName",
   "BeneficiaryDOB",
@@ -562,23 +563,50 @@ export const PLACEHOLDER_KEYS = [
   "ReferralActivityId",
   "ReferralActivityName",
   "ReferralDoctorName",
+  // IR Discharge Note (Nicosia Polyclinic structured form)
+  "Department",
+  "DepartmentManager",
+  "ConsultantDoctor",
+  "EpisodeNo",
+  "PatientName",
+  "HIOCode",
+  "PassportNo",
+  "HospitalId",
+  "DateOfBirth",
+  "Occupation",
+  "Gender",
+  "Address",
+  "Telephone",
+  "AdmissionWeight",
+  "VentilationHours",
+  "AdmissionVia",
+  "AdmissionDate",
+  "DischargeDate",
+  "LeaveDays",
+  "ReferralDoctor",
+  "ClinicalNote",
+  "Pacemaker",
+  "Delivery",
+  "PatientClinicalStatus",
+  "PrimaryDiagnosis",
+  "SecondaryDiagnosis",
+  "Therapy",
+  "SurgicalFindings",
+  "LabExamGroups",
+  "LabExamDetails",
+  "HistopathologyExaminations",
+  "Attachments",
+  "Anaesthetist",
+  "AnaesthesiaType",
+  "DischargeMode",
+  "DischargeStatus",
+  "Therapeutics",
+  "NextVisit",
 ] as const;
 
 export type PlaceholderKey = (typeof PLACEHOLDER_KEYS)[number];
 
-export interface PlaceholderContext {
-  BeneficiaryName: string;
-  BeneficiaryLastName: string;
-  BeneficiaryDOB: string;
-  BeneficiaryDocId: string;
-  ReferralId: string;
-  BeneficiaryGender: string;
-  VisitDateTime: string;
-  ReportDate: string;
-  ReferralActivityId: string;
-  ReferralActivityName: string;
-  ReferralDoctorName: string;
-}
+export type PlaceholderContext = Partial<Record<PlaceholderKey, string>>;
 
 /** Replace {{Key}}, [Key], <Key>, $Key occurrences with values from ctx. */
 export function applyPlaceholders(body: string, ctx: PlaceholderContext): string {

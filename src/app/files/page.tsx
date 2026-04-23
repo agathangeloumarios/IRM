@@ -6,7 +6,7 @@ import {
   Upload, Download, FolderOpen, FileText, FileSpreadsheet, FileCode2,
   FileImage, File as FileIcon, MoreHorizontal, Search, Plus, Lock, Unlock,
   Copy, Trash2, ArrowUp, ArrowDown, FileUp, ClipboardList, Stethoscope,
-  CheckCircle2, AlertCircle, Settings2, ImagePlus, X,
+  CheckCircle2, AlertCircle, Settings2, ImagePlus, X, LayoutList, Code2,
 } from "lucide-react";
 import { PageShell } from "@/components/layout/page-shell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,7 +28,11 @@ import { formatDate, cn } from "@/lib/utils";
 import {
   useTemplates, TemplateCategory, ReportTemplate,
   TemplateChrome, resolveChrome, PRACTICE_DEFAULTS,
+  PlaceholderContext, applyPlaceholders,
 } from "@/lib/template-store";
+import {
+  parseStructuredBody, isFormBody, DischargeFormEditor, ChromeKey,
+} from "@/lib/template-parser";
 
 const iconFor = (ext: string) => {
   switch (ext) {
@@ -610,12 +614,17 @@ function CustomizeDialog({
   const [body, setBody] = useState<string>(template.body);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [formMode, setFormMode] = useState(true);
+  const [formCtx, setFormCtx] = useState<PlaceholderContext>({});
+
+  const isForm = isFormBody(parseStructuredBody(template.body));
 
   // Reset local state when template or open state changes.
   React.useEffect(() => {
     if (open) {
       setChrome(template.chrome ?? {});
       setBody(template.body);
+      setFormCtx({});
       setSaving(false);
       setSaveError(null);
     }
@@ -623,6 +632,16 @@ function CustomizeDialog({
 
   const patch = <K extends keyof TemplateChrome>(k: K, v: TemplateChrome[K]) =>
     setChrome((c) => ({ ...c, [k]: v }));
+
+  const onBodyFieldChange = (key: keyof PlaceholderContext, value: string) => {
+    const newCtx = { ...formCtx, [key]: value };
+    setFormCtx(newCtx);
+    setBody(applyPlaceholders(template.body, newCtx));
+  };
+
+  const onBodyChromeChange = (key: ChromeKey, value: string) => {
+    patch(key as keyof TemplateChrome, value as TemplateChrome[keyof TemplateChrome]);
+  };
 
   const uploadImage = async (
     file: File | undefined,
@@ -866,16 +885,61 @@ function CustomizeDialog({
 
           {/* Body */}
           <section className="space-y-2 md:col-span-2">
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Template body</div>
-            <Textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              className="min-h-[200px] font-mono text-xs"
-            />
-            <div className="text-[10px] text-muted-foreground">
-              Use placeholders like <code className="font-mono">{"{{BeneficiaryName}}"}</code>,
-              <code className="font-mono"> {"{{VisitDateTime}}"}</code>, etc.
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Template body</div>
+              {isForm && (
+                <div className="flex items-center rounded-md border border-border overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setFormMode(true)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-2.5 py-1 text-[10px] transition-colors",
+                      formMode
+                        ? "bg-primary-foreground/10 text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <LayoutList className="h-3 w-3" /> Form
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormMode(false)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-2.5 py-1 text-[10px] transition-colors border-l border-border",
+                      !formMode
+                        ? "bg-primary-foreground/10 text-primary-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <Code2 className="h-3 w-3" /> Raw
+                  </button>
+                </div>
+              )}
             </div>
+            {isForm && formMode ? (
+              <DischargeFormEditor
+                template={{ ...template, chrome }}
+                ctx={formCtx}
+                hideChrome
+                readOnly={false}
+                onFieldChange={onBodyFieldChange}
+                onChromeChange={onBodyChromeChange}
+              />
+            ) : (
+              <>
+                <Textarea
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  className="min-h-[200px] font-mono text-xs"
+                />
+                {!isForm && (
+                  <div className="text-[10px] text-muted-foreground">
+                    Use placeholders like <code className="font-mono">{"{{BeneficiaryName}}"}</code>,
+                    <code className="font-mono"> {"{{VisitDateTime}}"}</code>, etc.
+                  </div>
+                )}
+              </>
+            )}
           </section>
         </div>
 
