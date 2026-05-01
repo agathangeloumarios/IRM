@@ -8,6 +8,11 @@ import {
 } from "@/lib/mock-data";
 
 const STORAGE_KEY = "irm:procedures:v2";
+const LEGACY_KEYS = [
+  "irm:procedures:v1",
+  "irm:procedures",
+  "irm:procedures:backup",
+] as const;
 
 /**
  * Build a clipboard payload matching the exact requested layout:
@@ -104,10 +109,102 @@ function load(): Procedure[] | null {
   }
 }
 
+function isProcedureLike(x: unknown): x is Procedure {
+  if (!x || typeof x !== "object") return false;
+  const p = x as Partial<Procedure>;
+  return (
+    typeof p.id === "string" &&
+    typeof p.patientId === "string" &&
+    typeof p.patientName === "string" &&
+    typeof p.type === "string" &&
+    typeof p.scheduledAt === "string" &&
+    typeof p.status === "string"
+  );
+}
+
+function normalizeRecovered(list: unknown): Procedure[] | null {
+  if (!Array.isArray(list)) return null;
+  const now = new Date().toISOString();
+  const out: Procedure[] = [];
+  for (const item of list) {
+    if (!isProcedureLike(item)) continue;
+    const p = item as Partial<Procedure>;
+    out.push({
+      id: p.id!,
+      patientId: p.patientId!,
+      patientName: p.patientName!,
+      patientMrn: p.patientMrn,
+      patientPhone: p.patientPhone,
+      patientDob: p.patientDob,
+      patientReferralId: p.patientReferralId,
+      patientDocId: p.patientDocId,
+      type: p.type!,
+      physician: p.physician || "Dr. Reyes",
+      scheduledAt: p.scheduledAt!,
+      durationMin: typeof p.durationMin === "number" ? p.durationMin : 60,
+      status: (p.status as ProcedureStatus) || "scheduled",
+      room: p.room || "IR-Suite 1",
+      notes: p.notes,
+      createdAt: p.createdAt || now,
+      updatedAt: p.updatedAt || now,
+      statusChangedAt: p.statusChangedAt || p.updatedAt || now,
+    });
+  }
+  return out.length ? out : null;
+}
+
+function loadRecoveryCandidates(): Procedure[] | null {
+  if (typeof window === "undefined") return null;
+  // 1) Try current key first.
+  const primary = load();
+  if (primary && primary.length > 0) return primary;
+
+  // 2) Try legacy keys; pick the richest dataset.
+  let best: Procedure[] | null = null;
+  for (const key of LEGACY_KEYS) {
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw) as unknown;
+      const normalized = normalizeRecovered(parsed);
+      if (!normalized) continue;
+      if (!best || normalized.length > best.length) best = normalized;
+    } catch {
+      // ignore malformed legacy payloads
+    }
+  }
+
+  // 3) Best-effort scan for unknown legacy keys that contain procedure arrays.
+  try {
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (!key) continue;
+      if (key === STORAGE_KEY || LEGACY_KEYS.includes(key as (typeof LEGACY_KEYS)[number])) continue;
+      if (!/proced/i.test(key)) continue;
+      try {
+        const raw = window.localStorage.getItem(key);
+        if (!raw) continue;
+        const parsed = JSON.parse(raw) as unknown;
+        const normalized = normalizeRecovered(parsed);
+        if (!normalized) continue;
+        if (!best || normalized.length > best.length) best = normalized;
+      } catch {
+        // ignore non-json/non-matching values
+      }
+    }
+  } catch {
+    // ignore storage iteration issues
+  }
+
+  return best;
+}
+
 function save(list: Procedure[]) {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    // Keep a rolling backup for recovery if schema/key changes happen again.
+    window.localStorage.setItem("irm:procedures:backup", JSON.stringify(list));
   } catch {
     // ignore quota / privacy errors — state still lives in memory
   }
@@ -129,11 +226,12 @@ export function ProcedureProvider({ children }: { children: React.ReactNode }) {
   // Mark hydrated on mount. If SSR rendered with SEED and localStorage has
   // data, adopt it here as a safety net.
   React.useEffect(() => {
-    // One-time cleanup: remove the legacy v1 key that could contain data
-    // corrupted by the pre-fix race between hydrate and persist effects.
-    try { window.localStorage.removeItem("irm:procedures:v1"); } catch { /* ignore */ }
-    const fromStore = load();
-    if (fromStore) setList(fromStore);
+    const recovered = loadRecoveryCandidates();
+    if (recovered) {
+      setList(recovered);
+      // Persist recovered data to primary key immediately.
+      save(recovered);
+    }
     setHydrated(true);
   }, []);
 

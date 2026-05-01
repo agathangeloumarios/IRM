@@ -41,6 +41,9 @@ const STATUS_BADGE: Record<ProcedureStatus, "success" | "warning" | "primary" | 
   cancelled: "destructive",
 };
 
+const CAPPED_STATUSES = new Set<ProcedureStatus>(["completed", "cancelled"]);
+const CAPPED_VISIBLE_COUNT = 5;
+
 export default function ProceduresPage() {
   const router = useRouter();
   const sp = useSearchParams();
@@ -79,12 +82,16 @@ export default function ProceduresPage() {
         p.type.toLowerCase().includes(q.toLowerCase()) ||
         (p.patientMrn || "").toLowerCase().includes(q.toLowerCase())
     );
-    return cols.map((c) => ({
-      ...c,
-      items: filtered
+    return cols.map((c) => {
+      const allItems = filtered
         .filter((p) => p.status === c.status)
-        .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt)),
-    }));
+        .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
+      return {
+        ...c,
+        allItems,
+        items: allItems.slice(CAPPED_STATUSES.has(c.status) ? -CAPPED_VISIBLE_COUNT : 0),
+      };
+    });
   }, [q, procedures]);
 
   const openCreate = (status: ProcedureStatus = "scheduled") => {
@@ -264,7 +271,7 @@ export default function ProceduresPage() {
                   <Icon className={`h-3.5 w-3.5 ${col.iconClass}`} />
                   <CardTitle className="text-xs">{col.label}</CardTitle>
                   <span className="rounded-sm border border-border bg-card/60 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
-                    {col.items.length}
+                    {col.allItems.length}
                   </span>
                 </div>
                 <Button
@@ -279,6 +286,11 @@ export default function ProceduresPage() {
                 {col.items.length === 0 && (
                   <div className="rounded-md border border-dashed border-border p-6 text-center text-[11px] text-muted-foreground">
                     No {col.label.toLowerCase()}
+                  </div>
+                )}
+                {CAPPED_STATUSES.has(col.status) && col.allItems.length > CAPPED_VISIBLE_COUNT && (
+                  <div className="rounded-md border border-border/70 bg-card/40 px-2 py-1 text-[10px] text-muted-foreground">
+                    Showing latest {CAPPED_VISIBLE_COUNT} of {col.allItems.length}
                   </div>
                 )}
                 {col.items.map((p) => (
