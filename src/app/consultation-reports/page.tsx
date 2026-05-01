@@ -18,9 +18,14 @@ import {
 import { cn } from "@/lib/utils";
 import { usePatients } from "@/lib/patient-store";
 import {
-  useTemplates, applyPlaceholders, PlaceholderContext, PLACEHOLDER_KEYS,
+  useTemplates,
   resolveChrome, ResolvedChrome,
 } from "@/lib/template-store";
+import {
+  applyPlaceholders,
+  PLACEHOLDER_KEYS,
+  type PlaceholderContext,
+} from "@/lib/placeholders";
 import type { Patient } from "@/lib/mock-data";
 
 // ---- Per-patient edit persistence (keyed by templateId + patientId) --------

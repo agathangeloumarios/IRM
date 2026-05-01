@@ -208,6 +208,8 @@ function ProcedureTypesPanel() {
 
 export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
+  const [purging, setPurging] = useState(false);
+  const [purgeResult, setPurgeResult] = useState<{ ok: boolean; deleted: number; error?: string } | null>(null);
   const {
     register,
     handleSubmit,
@@ -234,6 +236,24 @@ export default function SettingsPage() {
     await new Promise((r) => setTimeout(r, 600));
     setSaved(true);
     setTimeout(() => setSaved(false), 2400);
+  };
+
+  const purgeRedactedPatients = async () => {
+    setPurging(true);
+    setPurgeResult(null);
+    try {
+      const res = await fetch("/api/admin/patients/purge-redacted", { method: "POST" });
+      const data = (await res.json()) as { ok?: boolean; deleted?: number; error?: string };
+      if (!res.ok || !data.ok) {
+        setPurgeResult({ ok: false, deleted: 0, error: data.error || "purge_failed" });
+        return;
+      }
+      setPurgeResult({ ok: true, deleted: data.deleted || 0 });
+    } catch {
+      setPurgeResult({ ok: false, deleted: 0, error: "network_error" });
+    } finally {
+      setPurging(false);
+    }
   };
 
   return (
@@ -367,20 +387,55 @@ export default function SettingsPage() {
               </div>
               <Badge variant="success" className="gap-1"><ShieldCheck className="h-3 w-3" /> Compliant</Badge>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {[
-                { l: "AES-256 Encryption", v: "At rest & in transit" },
-                { l: "Audit Trail", v: "6-year retention" },
-                { l: "Access Control", v: "Role-based · MFA enforced" },
-                { l: "Session Timeout", v: "15 minutes idle" },
-                { l: "BAA on File", v: "Signed · up to date" },
-                { l: "Data Residency", v: "US-West · SOC 2 Type II" },
-              ].map((s) => (
-                <div key={s.l} className="rounded-md border border-border bg-card/60 p-3">
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.l}</div>
-                  <div className="mt-1 text-sm text-foreground font-medium">{s.v}</div>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[
+                  { l: "AES-256 Encryption", v: "At rest & in transit" },
+                  { l: "Audit Trail", v: "6-year retention" },
+                  { l: "Access Control", v: "Role-based · MFA enforced" },
+                  { l: "Session Timeout", v: "15 minutes idle" },
+                  { l: "BAA on File", v: "Signed · up to date" },
+                  { l: "Data Residency", v: "US-West · SOC 2 Type II" },
+                ].map((s) => (
+                  <div key={s.l} className="rounded-md border border-border bg-card/60 p-3">
+                    <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.l}</div>
+                    <div className="mt-1 text-sm text-foreground font-medium">{s.v}</div>
+                  </div>
+                ))}
+              </div>
+
+              <Separator />
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="text-sm font-medium text-foreground">Admin Data Purge</div>
+                  <div className="text-xs text-muted-foreground">
+                    Remove all redacted patient records immediately from persistence.
+                  </div>
                 </div>
-              ))}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={purgeRedactedPatients}
+                  disabled={purging}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {purging ? "Purging..." : "Purge Redacted Data"}
+                </Button>
+              </div>
+
+              {purgeResult && (
+                <div className={cn(
+                  "rounded-md border px-3 py-2 text-xs",
+                  purgeResult.ok
+                    ? "border-success/40 bg-success/10 text-success"
+                    : "border-destructive/40 bg-destructive/10 text-destructive",
+                )}>
+                  {purgeResult.ok
+                    ? `Purge complete. Deleted ${purgeResult.deleted} record(s).`
+                    : `Purge failed: ${purgeResult.error || "unknown_error"}`}
+                </div>
+              )}
             </CardContent>
           </Card>
 

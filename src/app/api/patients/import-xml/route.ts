@@ -10,6 +10,31 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+async function upsertImportLog(data: {
+  hash: string;
+  fileName?: string | null;
+  status: string;
+  patientId?: string | null;
+  violations?: string | null;
+}) {
+  await prisma.importLog.upsert({
+    where: { hash: data.hash },
+    create: {
+      hash: data.hash,
+      fileName: data.fileName ?? null,
+      status: data.status,
+      patientId: data.patientId ?? null,
+      violations: data.violations ?? null,
+    },
+    update: {
+      fileName: data.fileName ?? null,
+      status: data.status,
+      patientId: data.patientId ?? null,
+      violations: data.violations ?? null,
+    },
+  });
+}
+
 export async function POST(req: NextRequest) {
   const { xml, phone, fileName } = await req.json();
 
@@ -31,13 +56,11 @@ export async function POST(req: NextRequest) {
   // Parse + validate
   const { extracted, violations } = parsePatientXml(xml);
   if (violations.length && Object.values(extracted).every((v) => !v)) {
-    await prisma.importLog.create({
-      data: {
-        hash,
-        fileName: fileName ?? null,
-        status: "rejected",
-        violations: violations.join("; "),
-      },
+    await upsertImportLog({
+      hash,
+      fileName,
+      status: "rejected",
+      violations: violations.join("; "),
     });
     return NextResponse.json({ ok: false, error: "parse_failed", violations }, { status: 400 });
   }
@@ -47,13 +70,11 @@ export async function POST(req: NextRequest) {
   if (naturalKey.replace(/\|/g, "").length > 0) {
     const existing = await prisma.patient.findUnique({ where: { naturalKey } });
     if (existing) {
-      await prisma.importLog.create({
-        data: {
-          hash,
-          fileName: fileName ?? null,
-          status: "duplicate",
-          patientId: existing.id,
-        },
+      await upsertImportLog({
+        hash,
+        fileName,
+        status: "duplicate",
+        patientId: existing.id,
       });
       return NextResponse.json({ ok: true, deduped: true, patient: existing, violations });
     }
@@ -84,12 +105,19 @@ export async function POST(req: NextRequest) {
           importedAt: new Date(),
         },
       });
-      await tx.importLog.create({
-        data: {
+      await tx.importLog.upsert({
+        where: { hash },
+        create: {
           hash,
           fileName: fileName ?? null,
           status: "ok",
           patientId: p.id,
+        },
+        update: {
+          fileName: fileName ?? null,
+          status: "ok",
+          patientId: p.id,
+          violations: null,
         },
       });
       return p;
@@ -101,6 +129,12 @@ export async function POST(req: NextRequest) {
     if (e?.code === "P2002") {
       const existing = await prisma.patient.findUnique({ where: { naturalKey } });
       if (existing) {
+        await upsertImportLog({
+          hash,
+          fileName,
+          status: "duplicate",
+          patientId: existing.id,
+        });
         return NextResponse.json({ ok: true, deduped: true, patient: existing, violations });
       }
     }

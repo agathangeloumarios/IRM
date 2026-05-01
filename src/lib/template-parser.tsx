@@ -14,10 +14,10 @@ import * as React from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import type { PlaceholderContext } from "@/lib/placeholders";
 import {
   ReportTemplate,
   TemplateChrome,
-  PlaceholderContext,
   resolveChrome,
 } from "@/lib/template-store";
 

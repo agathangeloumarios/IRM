@@ -15,7 +15,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  FileText, Sparkles, Lock, Unlock, FileDown, Copy, Trash2,
+  FileText, Lock, Unlock, FileDown, Copy, Trash2,
   CheckCircle2, Upload, RotateCcw, Wand2, ClipboardPaste,
   ShieldCheck, Plus, LayoutList, Code2,
 } from "lucide-react";
@@ -25,11 +25,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { usePatients } from "@/lib/patient-store";
 import {
-  useTemplates, applyPlaceholders, PlaceholderContext, PLACEHOLDER_KEYS,
+  applyPlaceholders,
+  PLACEHOLDER_KEYS,
+  type PlaceholderContext,
+} from "@/lib/placeholders";
+import {
+  useTemplates,
   resolveChrome, ResolvedChrome, TemplateChrome, ReportTemplate,
 } from "@/lib/template-store";
 import { IR_DISCHARGE_NOTE_BODY } from "@/lib/template-seeds";
@@ -37,6 +41,7 @@ import {
   parseStructuredBody, isFormBody, DischargeFormEditor,
   ChromeKey, Block, NUM_SECTION_RE, SUB_SECTION_RE, KV_RE,
 } from "@/lib/template-parser";
+import { parseDemographics } from "@/lib/discharge-parser";
 import type { Patient } from "@/lib/mock-data";
 
 // ---------------------------------------------------------------------------
@@ -69,96 +74,6 @@ const GR_DATE = (ymd: string) => {
 };
 
 // ---------------------------------------------------------------------------
-// Paste-demographics parser
-// ---------------------------------------------------------------------------
-
-/**
- * Maps canonical field labels from the IR Discharge template to placeholder keys.
- * Labels are matched case/whitespace-insensitively. Regex values let a single
- * field accept multiple label variants (e.g. "ID/Passport", "ID / Passport No").
- */
-const DEMO_FIELD_MAP: { patterns: RegExp[]; key: keyof PlaceholderContext }[] = [
-  { key: "PatientName",           patterns: [/^patient\s*name$/i, /^name$/i] },
-  { key: "HIOCode",               patterns: [/^hio\s*code$/i] },
-  { key: "PassportNo",            patterns: [/^id\s*[\/\-]\s*passport(?:\s*no\.?)?$/i, /^passport(?:\s*no\.?)?$/i, /^id\s*no\.?$/i] },
-  { key: "HospitalId",            patterns: [/^hospital\s*id$/i] },
-  { key: "DateOfBirth",           patterns: [/^date\s*of\s*birth$/i, /^dob$/i, /^birth\s*date$/i] },
-  { key: "Occupation",            patterns: [/^occupation$/i] },
-  { key: "Gender",                patterns: [/^gender$/i, /^sex$/i] },
-  { key: "Address",               patterns: [/^address$/i] },
-  { key: "Telephone",             patterns: [/^telephone$/i, /^phone$/i, /^tel\.?$/i, /^mobile$/i] },
-  { key: "AdmissionWeight",       patterns: [/^admission\s*weight(?:\s*\(.*\))?$/i] },
-  { key: "VentilationHours",      patterns: [/^ventilation\s*hours$/i] },
-  { key: "AdmissionVia",          patterns: [/^admission\s*via$/i] },
-  { key: "AdmissionDate",         patterns: [/^admission\s*date$/i] },
-  { key: "DischargeDate",         patterns: [/^discharge\s*date$/i] },
-  { key: "LeaveDays",             patterns: [/^leave\s*days$/i] },
-  { key: "ReferralDoctor",        patterns: [/^referral\s*doctor$/i, /^referring\s*doctor$/i] },
-  { key: "ClinicalNote",          patterns: [/^clinical\s*note$/i] },
-  { key: "Pacemaker",             patterns: [/^pacemaker$/i] },
-  { key: "Delivery",              patterns: [/^delivery$/i] },
-  { key: "PatientClinicalStatus", patterns: [/^patient\s*clinical\s*status(?:\s*on\s*admission)?$/i, /^clinical\s*status$/i] },
-  { key: "PrimaryDiagnosis",      patterns: [/^primary\s*diagnosis$/i] },
-  { key: "SecondaryDiagnosis",    patterns: [/^secondary\s*diagnosis$/i] },
-  { key: "Therapy",               patterns: [/^therapy$/i, /^therapy\s*[–-]\s*clinical\s*procedures$/i] },
-  { key: "SurgicalFindings",      patterns: [/^surgical\s*findings$/i] },
-  { key: "LabExamGroups",         patterns: [/^laboratory\s*examinations?\s*groups$/i, /^lab\s*groups$/i] },
-  { key: "LabExamDetails",        patterns: [/^laboratory\s*examinations?\s*details$/i, /^lab\s*details$/i] },
-  { key: "HistopathologyExaminations", patterns: [/^histopathology(?:\s*examinations?)?$/i] },
-  { key: "Attachments",           patterns: [/^attachments?$/i] },
-  { key: "Anaesthetist",          patterns: [/^anaesthetist$/i, /^anesthetist$/i] },
-  { key: "AnaesthesiaType",       patterns: [/^anaesthesia\s*type$/i, /^anesthesia\s*type$/i] },
-  { key: "DischargeMode",         patterns: [/^(?:a\.?\s*)?mode(?:\s*\/\s*type)?$/i, /^discharge\s*mode$/i] },
-  { key: "DischargeStatus",       patterns: [/^(?:b\.?\s*)?status(?:\s*\/\s*condition)?$/i, /^discharge\s*status$/i] },
-  { key: "Therapeutics",          patterns: [/^therapeutically(?:\s*[–-].*)?$/i, /^medicines?(?:\s*and\s*advices?)?$/i] },
-  { key: "NextVisit",             patterns: [/^next\s*visit$/i] },
-  { key: "EpisodeNo",             patterns: [/^episode\s*no\.?$/i, /^episode\s*number$/i] },
-];
-
-/** Parse a copy-pasted block of `label: value` pairs into a partial context. */
-function parseDemographics(raw: string): {
-  values: Partial<PlaceholderContext>;
-  matched: (keyof PlaceholderContext)[];
-  unmatched: string[];
-} {
-  const values: Partial<PlaceholderContext> = {};
-  const matched: (keyof PlaceholderContext)[] = [];
-  const unmatched: string[] = [];
-  if (!raw) return { values, matched, unmatched };
-
-  const lines = raw.split(/\r?\n/);
-  let pendingKey: keyof PlaceholderContext | null = null;
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) { pendingKey = null; continue; }
-
-    const m = /^([^:]{1,80}):\s*(.*)$/.exec(trimmed);
-    if (!m) {
-      if (pendingKey) {
-        values[pendingKey] = ((values[pendingKey] ?? "") + "\n" + trimmed).trim();
-      } else {
-        unmatched.push(trimmed);
-      }
-      continue;
-    }
-
-    const label = m[1].trim();
-    const value = m[2].trim();
-    const entry = DEMO_FIELD_MAP.find((f) => f.patterns.some((re) => re.test(label)));
-    if (entry) {
-      values[entry.key] = value;
-      matched.push(entry.key);
-      pendingKey = value === "" ? entry.key : null;
-    } else {
-      unmatched.push(label);
-      pendingKey = null;
-    }
-  }
-  return { values, matched, unmatched };
-}
-
-// ---------------------------------------------------------------------------
 // Placeholder context — merges patient record + pasted demographics + defaults
 // ---------------------------------------------------------------------------
 
@@ -185,6 +100,11 @@ function buildPlaceholderContext(
   const actName = actRest.join(" — ");
 
   // Patient-derived defaults — overridden by any pasted demographic values.
+  // NOTE: Section 1 (patient demographics) and Section 4 (referral doctor)
+  // discharge fields are intentionally NOT derived from the XML patient record
+  // here. They must remain blank until the user explicitly fills them via
+  // "Fill from Paste". Only the Beneficiary* keys (used by consultation
+  // templates) are pre-populated from the selected patient.
   const fromPatient: PlaceholderContext = p ? {
     BeneficiaryName:      first,
     BeneficiaryLastName:  last,
@@ -197,14 +117,6 @@ function buildPlaceholderContext(
     ReferralActivityId:   actId || "",
     ReferralActivityName: actName || (p.activity ?? ""),
     ReferralDoctorName:   p.referringDoctor,
-    // Discharge mirrors
-    PatientName:      p.fullName,
-    PassportNo:       p.docId,
-    HospitalId:       p.mrn,
-    DateOfBirth:      GR_DATE(p.dob),
-    Gender:           p.gender,
-    Telephone:        p.phone,
-    ReferralDoctor:   p.referringDoctor,
   } : {};
 
   return {
@@ -320,8 +232,6 @@ export default function DischargeReportsPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [patientId, setPatientId]     = useState<string>("");
   const [activePreviewId, setActivePreviewId] = useState<string | null>(null);
-  const [filling, setFilling] = useState(false);
-  const [progress, setProgress] = useState(0);
   const [formMode, setFormMode] = useState(true);
 
   const [edits, setEdits] = useState<Record<string, string>>({});
@@ -364,29 +274,6 @@ export default function DischargeReportsPage() {
     setActivePreviewId(id);
   };
 
-  // ---- AI auto-fill (simulated latency + placeholder substitution) --------
-  const aiAutoFill = async () => {
-    if (!selectedPatient || selectedTemplates.length === 0 || isProtected) return;
-    setFilling(true); setProgress(0);
-    const ctx = buildPlaceholderContext(selectedPatient, currentDemographics);
-
-    const total = 12;
-    for (let i = 0; i <= total; i++) {
-      await new Promise((r) => setTimeout(r, 85));
-      setProgress(Math.round((i / total) * 100));
-    }
-
-    const next = { ...edits };
-    for (const t of selectedTemplates) {
-      next[editKey(t.id, selectedPatient.id)] = applyPlaceholders(t.body, ctx);
-    }
-    setEdits(next);
-    setFilling(false);
-    if (!activePreviewId || !selectedIds.includes(activePreviewId)) {
-      setActivePreviewId(selectedTemplates[0].id);
-    }
-  };
-
   // ---- Paste demographics handler ----------------------------------------
   const applyPaste = () => {
     if (!currentPreviewTpl) return;
@@ -397,7 +284,9 @@ export default function DischargeReportsPage() {
       [pasteKey]: mergedDemo,
     }));
     // Immediately rebuild the body so the A4 preview + raw editor stay in sync.
-    const ctx = buildPlaceholderContext(selectedPatient, mergedDemo);
+    // Deliberately pass undefined for the patient so only pasted values are
+    // used — patient XML data must not bleed through for unfilled fields.
+    const ctx = buildPlaceholderContext(undefined, mergedDemo);
     const newBody = applyPlaceholders(currentPreviewTpl.body, ctx);
     updateBody(newBody);
     // Switch to form view so filled fields are visible right away.
@@ -478,7 +367,10 @@ export default function DischargeReportsPage() {
     const newDemo = { ...(pastedByPatient[pasteKey] || {}), [key]: value };
     setPastedByPatient((cur) => ({ ...cur, [pasteKey]: newDemo }));
     const ctx = buildPlaceholderContext(selectedPatient, newDemo);
-    updateBody(applyPlaceholders(currentPreviewTpl.body, ctx));
+    const bodySource = PLACEHOLDER_KEYS.some((k) =>
+      new RegExp(`\\{\\{\\s*${k}\\s*\\}\\}|\\[\\s*${k}\\s*\\]|<\\s*${k}\\s*>|\\$${k}\\b`).test(currentBody),
+    ) ? currentBody : currentPreviewTpl.body;
+    updateBody(applyPlaceholders(bodySource, ctx));
   };
 
   /** Persist a chrome field change to the template record. */
@@ -522,7 +414,7 @@ export default function DischargeReportsPage() {
   return (
     <PageShell
       title="Discharge Reports"
-      subtitle="IR Discharge Note · Paste demographics · AI auto-fill · Placeholder normalization · A4 PDF export"
+      subtitle="IR Discharge Note · Paste demographics · Fill from Paste · Placeholder normalization · A4 PDF export"
       actions={
         <>
           <Button
@@ -648,8 +540,8 @@ export default function DischargeReportsPage() {
               />
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" variant="primary" onClick={applyPaste}
-                  disabled={!pasteDraft.trim()}>
-                  <Sparkles className="h-4 w-4" /> AI Auto-Fill
+                  disabled={!pasteDraft.trim() || !currentPreviewTpl}>
+                  <ClipboardPaste className="h-4 w-4" /> Fill from Paste
                 </Button>
                 <Button size="sm" variant="outline" onClick={clearPaste}>
                   <RotateCcw className="h-4 w-4" /> Clear
@@ -749,16 +641,6 @@ export default function DischargeReportsPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              {filling && (
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
-                    <span>Extracting patient data · resolving placeholders · composing</span>
-                    <span>{progress}%</span>
-                  </div>
-                  <Progress value={progress} />
-                </div>
-              )}
-
               {currentPreviewTpl ? (
                 <div className="flex justify-center overflow-x-auto bg-muted/30 rounded-md p-4">
                   <A4Preview body={currentBody}

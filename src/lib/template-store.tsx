@@ -1,6 +1,12 @@
 "use client";
 
 import * as React from "react";
+export {
+  PLACEHOLDER_KEYS,
+  applyPlaceholders,
+  type PlaceholderContext,
+  type PlaceholderKey,
+} from "@/lib/placeholders";
 
 /**
  * Template store for Consultation Reports and Discharge Reports.
@@ -548,78 +554,3 @@ export function useTemplates() {
   return ctx;
 }
 
-// ---- Shared placeholder resolution --------------------------------------
-
-export const PLACEHOLDER_KEYS = [
-  // Consultation (Greek beneficiary form)
-  "BeneficiaryName",
-  "BeneficiaryLastName",
-  "BeneficiaryDOB",
-  "BeneficiaryDocId",
-  "ReferralId",
-  "BeneficiaryGender",
-  "VisitDateTime",
-  "ReportDate",
-  "ReferralActivityId",
-  "ReferralActivityName",
-  "ReferralDoctorName",
-  // IR Discharge Note (Nicosia Polyclinic structured form)
-  "Department",
-  "DepartmentManager",
-  "ConsultantDoctor",
-  "EpisodeNo",
-  "PatientName",
-  "HIOCode",
-  "PassportNo",
-  "HospitalId",
-  "DateOfBirth",
-  "Occupation",
-  "Gender",
-  "Address",
-  "Telephone",
-  "AdmissionWeight",
-  "VentilationHours",
-  "AdmissionVia",
-  "AdmissionDate",
-  "DischargeDate",
-  "LeaveDays",
-  "ReferralDoctor",
-  "ClinicalNote",
-  "Pacemaker",
-  "Delivery",
-  "PatientClinicalStatus",
-  "PrimaryDiagnosis",
-  "SecondaryDiagnosis",
-  "Therapy",
-  "SurgicalFindings",
-  "LabExamGroups",
-  "LabExamDetails",
-  "HistopathologyExaminations",
-  "Attachments",
-  "Anaesthetist",
-  "AnaesthesiaType",
-  "DischargeMode",
-  "DischargeStatus",
-  "Therapeutics",
-  "NextVisit",
-] as const;
-
-export type PlaceholderKey = (typeof PLACEHOLDER_KEYS)[number];
-
-export type PlaceholderContext = Partial<Record<PlaceholderKey, string>>;
-
-/** Replace {{Key}}, [Key], <Key>, $Key occurrences with values from ctx. */
-export function applyPlaceholders(body: string, ctx: PlaceholderContext): string {
-  let out = body;
-  for (const key of PLACEHOLDER_KEYS) {
-    const v = ctx[key] ?? "";
-    const patterns = [
-      new RegExp(`\\{\\{\\s*${key}\\s*\\}\\}`, "g"),
-      new RegExp(`\\[\\s*${key}\\s*\\]`, "g"),
-      new RegExp(`<\\s*${key}\\s*>`, "g"),
-      new RegExp(`\\$${key}\\b`, "g"),
-    ];
-    for (const p of patterns) out = out.replace(p, v);
-  }
-  return out;
-}

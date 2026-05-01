@@ -26,9 +26,12 @@ import {
 import { files as miscFiles } from "@/lib/mock-data";
 import { formatDate, cn } from "@/lib/utils";
 import {
+  applyPlaceholders,
+  type PlaceholderContext,
+} from "@/lib/placeholders";
+import {
   useTemplates, TemplateCategory, ReportTemplate,
   TemplateChrome, resolveChrome, PRACTICE_DEFAULTS,
-  PlaceholderContext, applyPlaceholders,
 } from "@/lib/template-store";
 import {
   parseStructuredBody, isFormBody, DischargeFormEditor, ChromeKey,
